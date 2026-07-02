@@ -274,18 +274,14 @@ void core1_entry() {
 
         if (dirty_gpio_state != state[0].gpio_state)
         {
-            // write to GPIO pins based on the state and direction
-            for (int i = 0; i < 32; i++) 
-            {
-                if (state[0].gpio_direction & (1u << i)) 
-                { // If direction is output
-                    gpio_put(i, (state[0].gpio_state >> i) & 1);
-                }
-            }
+            gpio_put_masked(state[0].gpio_direction, state[0].gpio_state);  // Update GPIO pins based on the state register
         }
 
         if (dirty_gpio_direction != state[0].gpio_direction)
         {
+            //gpio_init_mask(state[0].gpio_direction);  // Initialize GPIO pins based on the direction register
+            //gpio_set_dir_masked(state[0].gpio_direction, state[0].gpio_direction);  // Set GPIO pin directions based on the direction register
+
             // set GPIO pin directions based on the direction register
             for (int i = 0; i < 32; i++) 
             {

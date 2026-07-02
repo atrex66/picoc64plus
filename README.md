@@ -203,5 +203,6 @@ The same hardware is also accessible via `PEEK`/`POKE` for machine-code programs
 
 ---
 
-> ROM files (`c64-roms.h`) are copyrighted by their respective owners and are not included — supply your own legally obtained copies.
+the rom files are used is found here:
+https://github.com/floooh/chips-test/blob/master/examples/roms/c64-roms.h
 

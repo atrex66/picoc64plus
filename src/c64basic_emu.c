@@ -20,6 +20,7 @@
 
 extern uint8_t read_memory(CPUState *state, uint16_t address);
 
+/*
 // Convert terminal ASCII to C64 PETSCII (uppercase mode)
 static uint8_t ascii_to_petscii(char c) {
     // Lowercase a-z -> uppercase A-Z (PETSCII uppercase/graphics mode)
@@ -32,6 +33,7 @@ static uint8_t ascii_to_petscii(char c) {
     if (c >= 0x20 && c <= 0x5F) return (uint8_t)c;
     return 0;
 }
+*/
 
 static void inject_key(uint8_t petscii) {
     if (petscii == 0) return;
@@ -148,6 +150,28 @@ void send_screen_packet(bool blink) {
     fflush(stdout);
 }
 
+size_t largest_free_block(void)
+{
+    size_t low = 0;
+    size_t high = 300 * 1024;   // vagy amennyinél biztosan nincs több
+    void *p;
+
+    while (high - low > 1) {
+        size_t mid = (low + high + 1) / 2;
+
+        p = malloc(mid);
+
+        if (p) {
+            free(p);
+            low = mid;
+        } else {
+            high = mid - 1;
+        }
+    }
+
+    return low;
+}
+
 int main()
 {
 
@@ -181,14 +205,14 @@ int main()
     init_terminal(TOTAL_W, TOTAL_H);
     clear_terminal();
     init_big_characters('a', ' ', 31);
-    set_framerate(60); // Set the desired framerate to 30 FPS    Buffer *screen_buffer = create_buffer(40, 25, ' ', '@');
+    set_framerate(60); // Set the desired framerate to 30 FPS    
     set_palette(palette256, sizeof(palette256) / sizeof(palette256[0]));
-    // set_palette(palette256, sizeof(palette256) / sizeof(palette256[0]));
     uint16_t timer=0;
     Buffer *border_buffer = create_buffer(TOTAL_W, TOTAL_H, ' ', '@'); // full frame buffer including border
     int sox = BORDER_SIDE;
     int soy = BORDER_TOP;
-    multicore_launch_core1(core1_entry);
+    multicore_launch_core1(core1_entry);  // start 6502 VM on core 1
+
     while (true) 
     {
         frame_start();
@@ -215,6 +239,7 @@ int main()
             color_data[(x + sox) + (y + soy) * FRAME_WIDTH] = memory[COLOR_RAM_START+i];
             background[(x + sox) + (y + soy) * FRAME_WIDTH] = memory[BACKGROUND_COLOR_ADDRESS];
         }
+        printf_atc(0, 0, 0x00, "Free mem: 0 bytes");
     #if use_host
         send_screen_packet(blink);
     #else

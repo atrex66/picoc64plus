@@ -623,6 +623,18 @@ void set_framerate(int fps) {
     }
 }
 
+uint8_t ascii_to_petscii(uint8_t ascii) {
+    if (ascii >= 0x20 && ascii <= 0x7E) {
+        return ascii - 0x20; // Map printable ASCII to PETSCII
+    } else if (ascii == 0x0A) {
+        return 0x0D; // Map newline to carriage return
+    } else if (ascii == 0x0D) {
+        return 0x0A; // Map carriage return to newline
+    } else {
+        return 0x00; // Default to space for unsupported characters
+    }
+}
+
 void frame_start() {
     current_time = time_us_32();
 }

@@ -34,6 +34,7 @@ uint8_t read_memory(CPUState *state, uint16_t address) {
     if (address == 0xD03f){
         return 0x80; // Return 0 for the VIC-II's raster register to prevent raster interrupts
     }
+    
     // CIA1 Port B ($DC01) — keyboard matrix row output
     // The KERNAL scans columns by writing to $DC00 and reads rows from $DC01.
     // RUN/STOP is in column 7 (bit 7 of $DC00 = 0), row 7 (bit 7 of $DC01 = 0).
@@ -47,8 +48,8 @@ uint8_t read_memory(CPUState *state, uint16_t address) {
     }
 
     // The basic extension is mapped to $C000-$CFFF, so we need to check if the address falls within that range and return the corresponding byte from BASIC_EXTENSION.
-    if (address >= BASICEXT_PRG_START_ADDRESS && address < BASICEXT_PRG_START_ADDRESS + BASICEXT_PRG_SIZE) {
-        return BASICEXT_PRG_DATA[address - BASICEXT_PRG_START_ADDRESS];
+    if (address >= BASIC_EXT_START_ADDRESS && address < BASIC_EXT_START_ADDRESS + BASIC_EXT_SIZE) {
+        return BASIC_EXTENSION[address - BASIC_EXT_START_ADDRESS];
     }
 
     // Cartridge autostart stub at $8000: CBM80 signature + cold/warm vectors.

@@ -59,16 +59,8 @@ picotool load build/c64_plus.uf2 -fx
 
 ## Host terminal
 
-An SDL2 app on Linux that renders the full C64 display and sends keystrokes back over serial.
-
-```bash
-cd host_side
-./build.sh          # checks deps, generates font.h, compiles
-./c64terminal /dev/ttyACM0        # 2× scale (default)
-./c64terminal /dev/ttyACM0 3      # 3× scale
-```
-
-Press **ESC** to quit. All standard C64 keys are mapped including function keys and cursor keys.
+Start PUTTY (recommended), change to serial port, find your serial port of the pico and start
+it is recommended to disable autowrap in the settings
 
 ---
 

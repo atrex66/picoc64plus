@@ -1,12 +1,11 @@
-# C64+ — Commodore 64 Emulator on Raspberry Pico 2
+# C64 minimal emulator on Raspberry Pico 2
 
-A Commodore 64 BASIC/KERNAL emulator running on the **Raspberry Pico 2 or Pico (RP2350,RP2040)**. The Pico emulates the 6502 CPU and C64 ROMs, exposes real Pico 2 hardware directly to BASIC via custom tokens and memory-mapped registers, and streams the screen to a host PC over USB serial.
+Program the Pico peripherals like in the 80's
 
 The emulator do not try to emulate the real hardware there is no VIC2 or CIA chips emulation
 the 6502 speed with a Pico is ~3.8 MOPS on a standard Pico2 it is ~4.01 MOPS
 
 The Basic extension currently needs to be enabled by SYS 49152
-
 
 ---
 

@@ -1,11 +1,4 @@
-# New BASIC Commands — C64+ Hardware Extensions
-
-These commands and functions extend C64 BASIC to control the RP2350 (Pico 2)
-hardware directly from BASIC programs. They are implemented as custom tokens
-in the range `$DF–$ED` and require the custom ROM patch (`main.prg`) to be
-loaded and initialised.
-
----
+# New BASIC Commands — SYS 49152
 
 ## GPIO — General Purpose I/O
 
@@ -294,6 +287,20 @@ Set the transfer unit width for subsequent `DMACPY` calls.
 DMASIZE 0            : REM byte transfers (default)
 ```
 
+### `DMAINCR i,j`
+Set the transfer unit width for subsequent `DMACPY` calls.
+
+| Argument | Value | Transfer unit |
+|----------|-------|---------------|
+| `i`      | `0 or 1`| increment the read address or not |
+| 'j`      | `0 or 1`| increment the write address or not |
+
+```basic
+DMAINCR 0,1    : REM  FILLS the target with the data on the source
+DMAINCR 1,1    : REM  COPY the source data to the target
+DMAINCR 1,0    : REM  STREAM copy the source data to one single memory location
+```
+
 ---
 
 ### `DMACPY src, dst, cnt`
@@ -317,7 +324,8 @@ DMACPY $0400, $0800, 1000  : REM copy 1000 bytes from screen to $0800
 ```basic
 10 POKE $FB, 32      : REM store a space character at $FB
 20 DMASIZE 0
-30 DMACPY $FB, $0400, 1000  : REM NOTE: read-inc is always on, so use MEMFILL for fills
+30 DMAINCR 0,1
+40 DMACPY $FB, $0400, 1000  : REM NOTE: read-inc is always on, so use MEMFILL for fills
 ```
 
 > **Note:** Both source and destination auto-increment, so `DMACPY` is best

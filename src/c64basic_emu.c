@@ -115,7 +115,7 @@ void tud_cdc_rx_cb(uint8_t itf) {
             inject_key(ascii_to_petscii(buf[i]));
             while (memory[C64_KEY_COUNT] >= memory[C64_KEY_BUF_MAX]) 
             {
-                sleep_ms(6);  // wait for buffer to have space
+                sleep_ms(20);  // wait for buffer to have space
             }
         }
         uint8_t b;
@@ -125,7 +125,7 @@ void tud_cdc_rx_cb(uint8_t itf) {
             inject_key(ascii_to_petscii(b));
             while (memory[C64_KEY_COUNT] >= memory[C64_KEY_BUF_MAX]) 
             {
-                sleep_ms(6);  // wait for buffer to have space
+                sleep_ms(20);  // wait for buffer to have space
             }
         }
     }
@@ -418,11 +418,6 @@ void core1_entry() {
                 if ((src + count) <= sizeof(memory) &&
                     (dst + count) <= sizeof(memory)) {
                     
-                    printf("\033[0m");  // reset color
-                    printf("DMA: %04X -> %04X, count=%d\n", src, dst, count);
-                    printf("DMA: src_ptr=%p, dst_ptr=%p\n", src_ptr, dst_ptr);
-                    printf("size=%u\n", size);
-
                     dma_channel_configure(
                         DMA_CHANNEL,
                         &cfg,

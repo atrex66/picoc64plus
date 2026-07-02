@@ -108,9 +108,12 @@ make
 
 ```basic
 REM Blink GP25 (onboard LED)
-PINMODE 25,1        : REM set GP25 as output
-10 PINOUT 25,1      : FOR T=1 TO 500 : NEXT T
-20 PINOUT 25,0      : FOR T=1 TO 500 : NEXT T
+
+10 PINMODE 25,1
+20 PINOUT 25,1
+30 FOR T=1 TO 1500:NEXT T
+20 PINOUT 25,0
+30 FOR T=1 TO 1500: NEXT T
 30 GOTO 10
 
 REM Read a button on GP15 with pull-up
@@ -122,21 +125,29 @@ PRINT PINGET(15)
 
 ```basic
 REM 50% duty on GP0 (slice 0, wrap=255)
-PWMSEL 0 : PWMWRP 255 : PWMLVL 128,0 : PWMON 0
+10 PWMSEL 0 
+20 PWMWRP 255 
+30 PWMLVL 128,0 
+40 PWMON 0
 ```
 
 ### I2C example
 
 ```basic
 REM Write 1 byte to SSD1306 OLED (address $3C = 60)
-I2CADR 60 : POKE 53329,0 : I2CWRT 1
+10 I2CADR 60
+20 POKE 53329,0
+30 I2CWRT 1
 ```
 
 ### DMA example
 
 ```basic
 REM Copy 256 bytes (set src/dst addresses via POKE to $D062/$D066 first)
-DMASIZE 0 : DMAINCR 1,1 : POKE 53354,0 : POKE 53355,1 : DMACPY
+DMASIZE 0
+DMAINCR 0,1 
+REM COPY $0 to the screen memory
+DMACPY 0,1024,1000
 ```
 
 ---

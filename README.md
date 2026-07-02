@@ -7,6 +7,8 @@ the 6502 speed with a Pico is ~3.8 MOPS on a standard Pico2 it is ~4.01 MOPS
 
 The Basic extension currently needs to be enabled by SYS 49152
 
+You can find the precompiled binary .uf2 file for Pico and Pico2 under the releases.
+
 ---
 
 ## Features

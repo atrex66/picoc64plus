@@ -6,8 +6,8 @@ testprogram/build/
 *.dis
 
 # Host terminal build artifacts
-host_side/c64terminal
-host_side/font.h
+host_side/
+host_side/
 
 # KickAssembler build artifacts
 CustomBasicCommands/*.prg

@@ -239,7 +239,6 @@ int main()
             color_data[(x + sox) + (y + soy) * FRAME_WIDTH] = memory[COLOR_RAM_START+i];
             background[(x + sox) + (y + soy) * FRAME_WIDTH] = memory[BACKGROUND_COLOR_ADDRESS];
         }
-        printf_atc(0, 0, 0x00, "Free mem: 0 bytes");
     #if use_host
         send_screen_packet(blink);
     #else

@@ -135,7 +135,7 @@ REM Write 1 byte to SSD1306 OLED (address $3C = 60)
 ### DMA example
 
 ```basic
-REM Copy 256 bytes (set src/dst addresses via POKE to $D062/$D066 first)
+REM Copy 1000 bytes (set src/dst addresses via POKE to $D062/$D066 first)
 DMASIZE 0
 DMAINCR 0,1 
 REM COPY $0 to the screen memory

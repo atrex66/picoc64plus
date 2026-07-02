@@ -16,7 +16,7 @@ The Basic extension currently needs to be enabled by SYS 49152
 - **KERNAL & BASIC ROM** emulation from embedded binary
 - **Custom BASIC tokens** — new commands and functions for GPIO, PWM, I2C and DMA
 - **Memory-mapped hardware registers** — same hardware also accessible via `PEEK`/`POKE`
-- **Host terminal** — SDL2 app renders the full C64 screen (52×29 with border) over USB CDC
+- **Host terminal** — Recommended to use PUTTY for maximum compatibility (full color mode)
 - Runs entirely from **SRAM** (`copy_to_ram`) for maximum speed
 - To activate the basic extension need to run the commnad SYS 49152
 

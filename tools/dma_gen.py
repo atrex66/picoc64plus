@@ -1,0 +1,48 @@
+
+import os
+
+
+DMA_CTRL = 0xd060
+DMA_SIZE = 0xd061
+
+DMA_SRC_00_07 = 0xd062
+DMA_SRC_08_15 = 0xd063
+
+DMA_DST_00_07 = 0xd066
+DMA_DST_08_15 = 0xd067
+
+DMA_COUNT_00_07 = 0xd06A
+DMA_COUNT_08_15 = 0xd06B
+
+DMA_READ_INCR = 0xd06C
+DMA_WRITE_INCR = 0xd06D
+
+SOURCE_ADDRESS = 0xdfff
+
+DESTINATION_ADDRESS = 1024
+TRANSFER_SIZE = 1000
+READ_INCREMENT = 0
+WRITE_INCREMENT = 1
+
+with open("dma_setup.bas", "wb") as f:
+    f.write(f"10 REM DMA SETUP\n".encode())
+    f.write(f"15 poke {DMA_SIZE}, 0: REM RESET DMA SIZE (8BIT)\n".encode())
+    f.write(f"20 POKE {DMA_SRC_00_07}, {SOURCE_ADDRESS & 0xFF}: REM SOURCE ADDRESS LOW BYTE\n".encode())
+    f.write(f"30 POKE {DMA_SRC_08_15}, {(SOURCE_ADDRESS >> 8) & 0xFF}: REM SOURCE ADDRESS HIGH BYTE\n".encode())
+
+    f.write(f"60 POKE {DMA_DST_00_07}, {DESTINATION_ADDRESS & 0xFF}: REM DESTINATION ADDRESS LOW BYTE\n".encode())
+    f.write(f"70 POKE {DMA_DST_08_15}, {(DESTINATION_ADDRESS >> 8) & 0xFF}: REM DESTINATION ADDRESS HIGH BYTE\n".encode())
+        
+    f.write(f"100 POKE {DMA_COUNT_00_07}, {TRANSFER_SIZE & 0xFF}: REM TRANSFER SIZE LOW BYTE\n".encode())
+    f.write(f"110 POKE {DMA_COUNT_08_15}, {(TRANSFER_SIZE >> 8) & 0xFF}: REM TRANSFER SIZE HIGH BYTE\n".encode())
+
+    f.write(f"120 POKE {DMA_READ_INCR}, {READ_INCREMENT}: REM READ INCREMENT\n".encode())
+    f.write(f"130 POKE {DMA_WRITE_INCR}, {WRITE_INCREMENT}: REM WRITE INCREMENT\n".encode())
+
+    f.write(f"140 POKE {DMA_COUNT_00_07}, {TRANSFER_SIZE & 0xFF}: REM TRANSFER SIZE LOW BYTE\n".encode())
+    f.write(f"150 POKE {DMA_COUNT_08_15}, {(TRANSFER_SIZE >> 8) & 0xFF}: REM TRANSFER SIZE HIGH BYTE\n".encode())
+
+    f.write(f"160 POKE {DMA_CTRL}, 1: REM START DMA TRANSFER\n".encode())
+    f.write(f"170 PRINT \"DMA TRANSFER STARTED\"\n".encode())
+
+

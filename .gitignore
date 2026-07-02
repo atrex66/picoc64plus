@@ -1,0 +1,19 @@
+build/
+backup/
+testprogram/build/
+*.o
+*.map
+*.dis
+
+# Host terminal build artifacts
+host_side/c64terminal
+host_side/font.h
+
+# KickAssembler build artifacts
+CustomBasicCommands/*.prg
+CustomBasicCommands/*.sym
+CustomBasicCommands/*.vs
+CustomBasicCommands/*.dbg
+CustomBasicCommands/ByteDump.txt
+
+!.vscode/*

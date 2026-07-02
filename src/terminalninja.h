@@ -614,24 +614,25 @@ void infinite_loop() {
     }
 }
 
+// Convert terminal ASCII to C64 PETSCII (uppercase mode)
+static uint8_t ascii_to_petscii(char c) {
+    // Lowercase a-z -> uppercase A-Z (PETSCII uppercase/graphics mode)
+    if (c >= 'a' && c <= 'z') return (uint8_t)(c - 0x20);
+    // Return / linefeed -> PETSCII RETURN
+    if (c == '\r' || c == '\n') return 0x0D;
+    // Backspace / DEL -> PETSCII DEL (C64 backspace)
+    if (c == 0x08 || c == 0x7F) return 0x14;
+    // Printable ASCII $20-$5F map 1:1 to PETSCII
+    if (c >= 0x20 && c <= 0x5F) return (uint8_t)c;
+    return 0;
+}
+
 void set_framerate(int fps) {
     if (fps <= 0) {
         fps_lock = false; // Disable FPS lock if fps is zero or negative
     } else {
         fps_lock = true; // Enable FPS lock
         target_frame_ns = 1000000 / fps; // Convert FPS to microseconds per frame
-    }
-}
-
-uint8_t ascii_to_petscii(uint8_t ascii) {
-    if (ascii >= 0x20 && ascii <= 0x7E) {
-        return ascii - 0x20; // Map printable ASCII to PETSCII
-    } else if (ascii == 0x0A) {
-        return 0x0D; // Map newline to carriage return
-    } else if (ascii == 0x0D) {
-        return 0x0A; // Map carriage return to newline
-    } else {
-        return 0x00; // Default to space for unsupported characters
     }
 }
 
@@ -1175,6 +1176,26 @@ void printf_add_big_atc(int x, int y, uint8_t color, const char *fmt, ...)
         blit_add_to_screen(glyph, cursor_x, y);
 
         cursor_x += glyph->width;
+    }
+}
+
+void printf_atc(int x, int y, uint8_t color, const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+
+    char text[512];
+    vsnprintf(text, sizeof(text), fmt, args);
+
+    va_end(args);
+
+    int cursor_x = x;
+
+    for (const char *p = text; *p; p++) {
+        uint8_t ch = (uint8_t)*p;
+        screen[(y) * FRAME_WIDTH + (cursor_x)] = ch;
+        color_data[(y) * FRAME_WIDTH + (cursor_x)] = color;
+        cursor_x++;
     }
 }
 

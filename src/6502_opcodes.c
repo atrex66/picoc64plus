@@ -5,8 +5,8 @@
 #include "cartstub.h"
 
 extern volatile bool runstop_pressed;  // set by tud_cdc_rx_cb on CTRL+C / ESC
-
-CPUState cpu_state;
+//CPUState cpu_state;
+//CIA_State cia_state;
 uint8_t memory[MEMORY_SIZE];
 uint8_t temp;
 uint16_t temp_address;
@@ -24,7 +24,7 @@ uint8_t read_memory(CPUState *state, uint16_t address) {
     uint32_t bstart = basic_start_address;
     uint32_t bend = bstart + 8192;
 
-    #ifdef IO_START    // for later use, if we want to emulate the IO area under the ROM address space (C16, C+4)
+     #ifdef IO_START    // for later use, if we want to emulate the IO area under the ROM address space (C16, C+4)
     if (address >= IO_START && address <= IO_END) {
         // For now, just return the value from memory
         return memory[address];
@@ -34,23 +34,12 @@ uint8_t read_memory(CPUState *state, uint16_t address) {
     if (address == 0xD03f){
         return 0x80; // Return 0 for the VIC-II's raster register to prevent raster interrupts
     }
-    
-    // CIA1 Port B ($DC01) — keyboard matrix row output
-    // The KERNAL scans columns by writing to $DC00 and reads rows from $DC01.
-    // RUN/STOP is in column 7 (bit 7 of $DC00 = 0), row 7 (bit 7 of $DC01 = 0).
-    if (address == 0xDC01) {
-        uint8_t col_select = memory[0xDC00];  // active columns (0 = selected)
-        uint8_t result = 0xFF;                // all rows high = no key pressed
-        if ((col_select & 0x80) == 0) {       // column 7 selected
-            if (runstop_pressed) result &= ~0x80;  // row 7 low = RUN/STOP held
-        }
-        return result;
-    }
 
     // The basic extension is mapped to $C000-$CFFF, so we need to check if the address falls within that range and return the corresponding byte from BASIC_EXTENSION.
     if (address >= BASIC_EXT_START_ADDRESS && address < BASIC_EXT_START_ADDRESS + BASIC_EXT_SIZE) {
         return BASIC_EXTENSION[address - BASIC_EXT_START_ADDRESS];
     }
+
 
     // Cartridge autostart stub at $8000: CBM80 signature + cold/warm vectors.
     // ColdStart does JSR $C000 (installs BASIC extension vectors) then RTS so

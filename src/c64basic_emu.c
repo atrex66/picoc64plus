@@ -20,20 +20,10 @@
 
 extern uint8_t read_memory(CPUState *state, uint16_t address);
 
-/*
-// Convert terminal ASCII to C64 PETSCII (uppercase mode)
-static uint8_t ascii_to_petscii(char c) {
-    // Lowercase a-z -> uppercase A-Z (PETSCII uppercase/graphics mode)
-    if (c >= 'a' && c <= 'z') return (uint8_t)(c - 0x20);
-    // Return / linefeed -> PETSCII RETURN
-    if (c == '\r' || c == '\n') return 0x0D;
-    // Backspace / DEL -> PETSCII DEL (C64 backspace)
-    if (c == 0x08 || c == 0x7F) return 0x14;
-    // Printable ASCII $20-$5F map 1:1 to PETSCII
-    if (c >= 0x20 && c <= 0x5F) return (uint8_t)c;
-    return 0;
+
+static uint8_t to_bcd(uint8_t value) {
+    return ((value / 10) << 4) | (value % 10);
 }
-*/
 
 static void inject_key(uint8_t petscii) {
     if (petscii == 0) return;
@@ -78,9 +68,15 @@ uint8_t hex_to_byte(const char* hex) {
 
 #define C64_FRAME_US 33333 // ~30 Hz frame time in microseconds
 
+char enter = 0;
+
 void tud_cdc_rx_cb(uint8_t itf) {
+
+    if (itf != 0) return;  // only handle interface 0
+    
     char buf[32];
     uint32_t count = tud_cdc_read(buf, sizeof(buf));
+
     if (buf[0] == 0x1B && buf[1] == '[')   // ESC [ sequence = cursor key
     {  // ESC sequence
         char c = buf[2];
@@ -103,16 +99,11 @@ void tud_cdc_rx_cb(uint8_t itf) {
         } else if (c == 'F') 
         {  // end key
             inject_key(0x03);
-        } else if (c == '5')
-        {
-            inject_key(0x3f);  // F5 key = run-stop
+        } else if (c == 0x33)
+        {  // del key
+            inject_key(0x14);  
         }
-    } else if (buf[0] == 0x03) {  // CTRL+C = RUN/STOP
-        runstop_pressed = true;
-    } else if (buf[0] == 0x1B && count == 1) {  // bare ESC = RUN/STOP
-        runstop_pressed = true;
     } else {
-        runstop_pressed = false;
         for (uint32_t i = 0; i < count; i++) {
             inject_key(ascii_to_petscii(buf[i]));
             while (memory[C64_KEY_COUNT] >= memory[C64_KEY_BUF_MAX]) 
@@ -150,28 +141,6 @@ void send_screen_packet(bool blink) {
     fflush(stdout);
 }
 
-size_t largest_free_block(void)
-{
-    size_t low = 0;
-    size_t high = 300 * 1024;   // vagy amennyinél biztosan nincs több
-    void *p;
-
-    while (high - low > 1) {
-        size_t mid = (low + high + 1) / 2;
-
-        p = malloc(mid);
-
-        if (p) {
-            free(p);
-            low = mid;
-        } else {
-            high = mid - 1;
-        }
-    }
-
-    return low;
-}
-
 int main()
 {
 
@@ -205,7 +174,7 @@ int main()
     init_terminal(TOTAL_W, TOTAL_H);
     clear_terminal();
     init_big_characters('a', ' ', 31);
-    set_framerate(60); // Set the desired framerate to 30 FPS    
+    set_framerate(50); // Set the desired framerate to 30 FPS    
     set_palette(palette256, sizeof(palette256) / sizeof(palette256[0]));
     uint16_t timer=0;
     Buffer *border_buffer = create_buffer(TOTAL_W, TOTAL_H, ' ', '@'); // full frame buffer including border
@@ -216,6 +185,15 @@ int main()
     while (true) 
     {
         frame_start();
+        tud_task();  // TinyUSB device task
+        // generating TOD clock values based on the system time
+        uint64_t now = time_us_64();
+        bool am_pm = (now / 360000000) % 2; // 0 = AM, 1 = PM
+        memory[TOD_10THS_ADDRESS] = to_bcd((now / 100000) % 10);
+        memory[TOD_SECONDS_ADDRESS] = to_bcd((now / 1000000) % 60);
+        memory[TOD_MINUTES_ADDRESS] = to_bcd((now / 60000000) % 60);
+        memory[TOD_HOURS_ADDRESS] = to_bcd((now / 360000000) % 24);
+        memory[TOD_HOURS_ADDRESS] = (memory[TOD_HOURS_ADDRESS] & 0x1F) | (am_pm ? 0x20 : 0x00); // set AM/PM bit
         hide_terminal_cursor();
         fill_background_buffer(border_buffer, memory[BORDER_COLOR_ADDRESS]); // Fill border buffer with default background color
         copy_to_screen(border_buffer, 0, 0); // Copy border buffer to screen
@@ -245,6 +223,7 @@ int main()
         render_frame();
     #endif
         frame_end();
+
         if (timer++ & 0x0F) {
             blink = !blink; // Toggle blink state
         }
@@ -285,12 +264,14 @@ void core1_entry() {
     memory[0xD06C] = 1;  // DMA_READ_INC  default = 1
     memory[0xD06D] = 1;  // DMA_WRITE_INC default = 1
 
+    uint32_t time_offset = 0;
+
     while (true) {
         // emulate vic2 raster line counter increment
         if ((counter++ & 0xff) == 0xff){
             memory[0xD012]++;
         }
- 
+
         if (dirty_gpio_state != state[0].gpio_state)
         {
             // write to GPIO pins based on the state and direction

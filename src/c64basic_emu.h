@@ -150,6 +150,11 @@ const char* c64_to_utf8[256] = {
 #define BACKGROUND_COLOR_ADDRESS 0xD021
 #define BORDER_COLOR_ADDRESS     0xD020
 
+#define TOD_10THS_ADDRESS        0xDC04
+#define TOD_SECONDS_ADDRESS      0xDC05
+#define TOD_MINUTES_ADDRESS      0xDC06
+#define TOD_HOURS_ADDRESS        0xDC07
+
 // ── Terminal screen layout ────────────────────────────────────────────────────
 #define BORDER_SIDE    6           // chars of border on each horizontal side
 #define BORDER_TOP     2           // rows of border on top and bottom

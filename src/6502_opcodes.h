@@ -39,6 +39,11 @@ typedef struct {
     char disassembly[32];
 } CPUState;
 
+typedef struct {
+    uint8_t cotrol_register;  // Control register for GPIO direction and pull-up configuration
+    uint8_t status_register;   // Status register for GPIO input values
+} CIA_State;
+
 #define IRQ_VECTOR 0x314
 #define BRK_VECTOR 0x0316
 #define NMI_VECTOR 0x31A
@@ -47,6 +52,7 @@ extern CPUState cpu_state;
 extern uint8_t memory[MEMORY_SIZE];
 extern uint8_t temp;
 extern uint16_t temp_address;
+extern CIA_State cia_state;  // Declare the CIA state as extern
 
 uint8_t read_memory(CPUState *state, uint16_t address);
 void write_memory(CPUState *state, uint16_t address, uint8_t value);

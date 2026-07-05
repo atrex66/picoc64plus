@@ -15,7 +15,7 @@ if len(sys.argv) == 5:
     prefix     = sys.argv[4]
 else:
     # Legacy behaviour
-    program    = "basicext.prg"
+    program    = "cartstub.prg"
     out_path   = f"{program}.h"
     array_name = program.upper().replace('.', '_') + "_DATA"
     prefix     = program.upper().replace('.', '_')

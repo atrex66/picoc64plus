@@ -1,9 +1,9 @@
 #include <stdio.h>
+#include <stdint.h>
 #include <string.h>
 #include "6502_opcodes.h"
 #include "c64-roms.h"
 #include "basicext.h"
-#include "cartstub.h"
 #include "memmap.h"
 
 uint8_t memory[MEMORY_SIZE];
@@ -19,13 +19,6 @@ uint8_t memory[MEMORY_SIZE];
 #define cart_high_start_address 0xE000 
 
 uint8_t read_memory(CPUState *state, uint16_t address) {
-
-     #ifdef IO_START    
-    if (address >= IO_START && address <= IO_END) {
-        return memory[address];
-    }
-    #endif
-
 
     if (address >= BASIC_EXT_START_ADDRESS && address < BASIC_EXT_START_ADDRESS + BASIC_EXT_SIZE) {
         return BASIC_EXTENSION[address - BASIC_EXT_START_ADDRESS];

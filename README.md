@@ -5,7 +5,11 @@ Program the Pico peripherals like in the 80's
 The emulator do not try to emulate the real hardware there is no VIC2 or CIA chips emulation
 the 6502 speed with a Pico is ~3.8 MOPS on a standard Pico2 it is ~4.01 MOPS
 
-The Basic extension currently needs to be enabled by SYS 49152
+**The Basic extension currently needs to be enabled by SYS 49152**
+
+**You can load basic programs from your PC trough PUTTY** by copy the code to the clipboard (ctrl+c)
+and press shift+ins in the terminal program to paste the basic program trough the terminal,
+there is no screen refresh when the program loading, no worry its not freezing just a littlebit slow.
 
 You can find the precompiled binary .uf2 file for Pico and Pico2 under the releases.
 
@@ -13,15 +17,22 @@ You can find the precompiled binary .uf2 file for Pico and Pico2 under the relea
 
 ## Features
 
-- Full **MOS 6502 CPU** emulation (all standard opcodes)
-- **KERNAL & BASIC ROM** emulation from embedded binary
+- Full MOS 6502 CPU emulation (all standard opcodes)
+- KERNAL & BASIC ROM emulation from embedded binary
 - **Custom BASIC tokens** — new commands and functions for GPIO, PWM, I2C and DMA
-- **Memory-mapped hardware registers** — same hardware also accessible via `PEEK`/`POKE`
-- **Host terminal** — Recommended to use PUTTY for maximum compatibility (full color mode)
+- Memory-mapped hardware registers — same hardware also accessible via `PEEK`/`POKE`
+- **Host terminal — Recommended to use PUTTY for maximum compatibility (full color mode) **
 - Runs entirely from **SRAM** (`copy_to_ram`) for maximum speed
 - To activate the basic extension need to run the commnad SYS 49152
+- support of rendering sprites on the terminal (2pixel on one glyph) max 64 sprites with 255x255 size and 256 colors
+- the terminal sprite registers are in the shadow ram from $A000 you can write it but can not read back because it is ROM area
+- 'MEMMAP.md'
 
 ---
+
+## Tools
+
+- Added a simple sprite editor in the 'tools' directory, it generates a c header file and also a basic samlple for load the sprite
 
 ## Hardware
 

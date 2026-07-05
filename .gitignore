@@ -4,6 +4,19 @@ testprogram/build/
 *.o
 *.map
 *.dis
+*.spr
+*.scr
+*.jpg
+*.scr
+*.jpeg
+*.png
+
+src/*.py
+tools/sprite_data.h.bas
+tools/sprite_data.h
+tools/buffer_editor.py
+tools/*.bas
+tools/*.h
 
 # Host terminal build artifacts
 host_side/

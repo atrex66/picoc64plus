@@ -37,6 +37,7 @@ pico_sdk_init()
 add_executable(c64_plus 
         src/6502_opcodes.c
         src/c64basic_emu.c
+        #libs/pico-lfs/src/pico_lfs.c
         )
 
 pico_set_program_name(c64_plus "c64_plus")
@@ -49,6 +50,23 @@ pico_set_binary_type(c64_plus copy_to_ram)
 pico_enable_stdio_uart(c64_plus 0)
 pico_enable_stdio_usb(c64_plus 1)
 
+#target_compile_definitions(c64_plus PRIVATE
+  #LFS_THREADSAFE=1
+  #LFS_NO_DEBUG=1
+#)
+
+#add_subdirectory(libs/pico-lfs)
+
+# Add the standard include files to the build
+target_include_directories(c64_plus PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/src
+        ${CMAKE_CURRENT_LIST_DIR}/src/include
+  #      ${CMAKE_CURRENT_LIST_DIR}/libs/pico-lfs/src
+ #       ${CMAKE_CURRENT_LIST_DIR}/libs/pico-lfs/libs/littlefs/
+)
+
+
 # Add the standard library to the build
 target_link_libraries(c64_plus
         pico_stdlib
@@ -57,16 +75,17 @@ target_link_libraries(c64_plus
         hardware_clocks
         hardware_pwm
         hardware_i2c
-        hardware_dma)
-
-# Add the standard include files to the build
-target_include_directories(c64_plus PRIVATE
-        ${CMAKE_CURRENT_LIST_DIR}
-        ${CMAKE_CURRENT_LIST_DIR}/src
-)
+        hardware_dma
+#        pico-lfs
+        )
 
 pico_add_extra_outputs(c64_plus)
-    
+
+target_compile_options(c64_plus PRIVATE 
+    -O3
+    #-mcpu=cortex-m33
+)
+
 add_custom_command(TARGET c64_plus POST_BUILD
     COMMAND arm-none-eabi-size $<TARGET_FILE:c64_plus>
 )

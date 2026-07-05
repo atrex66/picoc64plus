@@ -18,8 +18,14 @@
 #include "palette256.h"
 #include "terminalninja.h"
 
-extern uint8_t read_memory(CPUState *state, uint16_t address);
 
+CPUState state = {0};
+
+void core1_entry();
+
+#define C64_FRAME_US 33333 // ~30 Hz frame time in microseconds
+
+// extern uint8_t read_memory(CPUState *state, uint16_t address);
 
 static uint8_t to_bcd(uint8_t value) {
     return ((value / 10) << 4) | (value % 10);
@@ -39,14 +45,6 @@ void print_bin(unsigned int v) {
     }
 }
 
-CPUState state[2] = {0};
-void core1_entry();
-volatile int reset_flag = 0;
-volatile bool blink = true;  // cursor blink state
-volatile bool runstop_pressed = false;  // RUN/STOP key state (CTRL+C or ESC)
-
-static Buffer border_buf;   // full frame filled with border colour
-static Buffer c64_buf;      // 40x25 C64 text content
 // ─────────────────────────────────────────────────────────────────────────────
 
 uint8_t hex_to_byte(const char* hex) {
@@ -66,21 +64,16 @@ uint8_t hex_to_byte(const char* hex) {
     return value;
 }
 
-#define C64_FRAME_US 33333 // ~30 Hz frame time in microseconds
-
-char enter = 0;
-
 void tud_cdc_rx_cb(uint8_t itf) {
 
     if (itf != 0) return;  // only handle interface 0
-    
+   
     char buf[32];
     uint32_t count = tud_cdc_read(buf, sizeof(buf));
 
-    if (buf[0] == 0x1B && buf[1] == '[')   // ESC [ sequence = cursor key
+     if (buf[0] == 0x1B && buf[1] == '[')   // ESC [ sequence = cursor key
     {  // ESC sequence
         char c = buf[2];
-        runstop_pressed = false;
         if (c == 'A') 
         {  // up arrow
             inject_key(0x91);
@@ -106,7 +99,8 @@ void tud_cdc_rx_cb(uint8_t itf) {
     } else {
         for (uint32_t i = 0; i < count; i++) {
             inject_key(ascii_to_petscii(buf[i]));
-            while (memory[C64_KEY_COUNT] >= memory[C64_KEY_BUF_MAX]) 
+            sleep_ms(1);  // small delay to avoid overwhelming the buffer
+            while (memory[C64_KEY_COUNT] >= memory[C64_KEY_BUF_MAX] - 1) 
             {
                 sleep_ms(20);  // wait for buffer to have space
             }
@@ -116,7 +110,8 @@ void tud_cdc_rx_cb(uint8_t itf) {
         {
             uint32_t count = tud_cdc_read(&b, 1);
             inject_key(ascii_to_petscii(b));
-            while (memory[C64_KEY_COUNT] >= memory[C64_KEY_BUF_MAX]) 
+            sleep_ms(1);  // small delay to avoid overwhelming the buffer
+            while (memory[C64_KEY_COUNT] >= memory[C64_KEY_BUF_MAX] - 1) 
             {
                 sleep_ms(20);  // wait for buffer to have space
             }
@@ -124,6 +119,7 @@ void tud_cdc_rx_cb(uint8_t itf) {
     }
 }
 
+/*
 void send_screen_packet(bool blink) {
     C64ScreenPacket pkt;
     pkt.magic[0]=0xC6; pkt.magic[1]=0x40; pkt.magic[2]=0xDE; pkt.magic[3]=0xAD;
@@ -140,18 +136,47 @@ void send_screen_packet(bool blink) {
     fwrite(&pkt, sizeof(pkt), 1, stdout);
     fflush(stdout);
 }
+*/
+
+/*
+void init_littlefs(lfs_t lfs) {
+    lfs_cfg = pico_lfs_init(FLASH_OFFSET, FS_SIZE);
+    if (!lfs_cfg)
+        panic("out of memory");
+
+
+    int err = lfs_mount(&lfs, lfs_cfg);
+    if (err != LFS_ERR_OK) {
+
+        err = lfs_format(&lfs, lfs_cfg);
+        if (err != LFS_ERR_OK)
+        panic("failed to format filesystem");
+        err = lfs_mount(&lfs, lfs_cfg);
+        if (err != LFS_ERR_OK)
+        panic("failed to mount new filesystem");
+    }
+}
+*/
 
 int main()
 {
+    uint8_t counter = 0;
+    uint64_t timer=0;
+    int sox = BORDER_SIDE;
+    int soy = BORDER_TOP;
+    bool blink = true;  // cursor blink state
+    int increment = 1;  // sprite movement increment
+    uint32_t last_irq_us = time_us_32();  // CIA1 60 Hz IRQ timer
+    uint8_t last_key_pressed = 0;
+    Buffer *border_buffer = create_buffer(TOTAL_W, TOTAL_H, ' ', '@'); // full frame buffer including border
+    SpriteAsset_t sprites[SPRITE_LEN] = {0};  // Array to hold sprite data
+    memset(sprites, 0, sizeof(sprites));  // Initialize sprite data to zero
 
     // Raise voltage before raising clock, lower clock before lowering voltage
     vreg_set_voltage(CPU_CORE_VOLTAGE);
     sleep_ms(50);  // let regulator settle
     set_sys_clock_khz(CPU_CLOCK_KHZ, true);
-
-    uint64_t last_irq_us = time_us_64();  // CIA1 60 Hz IRQ timer
-    uint8_t last_key_pressed = 0;
-    
+   
     stdio_init_all();
 
     sleep_ms(1000);  // wait for USB serial to be ready
@@ -162,38 +187,23 @@ int main()
     gpio_set_function(I2C_SCL_PIN, GPIO_FUNC_I2C);
     gpio_pull_up(I2C_SDA_PIN);
     gpio_pull_up(I2C_SCL_PIN);
-    // ─────────────────────────────────────────────────────────────────────────
-
-    for (int i = 0; i < 8; i++) {
-        gpio_init(i);
-        gpio_set_dir(i, true);
-    }
-
-    uint8_t counter = 0;
     
-    init_terminal(TOTAL_W, TOTAL_H);
+     init_terminal(TOTAL_W, TOTAL_H);
     clear_terminal();
     init_big_characters('a', ' ', 31);
-    set_framerate(50); // Set the desired framerate to 30 FPS    
+    set_framerate(25); // Set the desired framerate to 30 FPS    
     set_palette(palette256, sizeof(palette256) / sizeof(palette256[0]));
-    uint16_t timer=0;
-    Buffer *border_buffer = create_buffer(TOTAL_W, TOTAL_H, ' ', '@'); // full frame buffer including border
-    int sox = BORDER_SIDE;
-    int soy = BORDER_TOP;
+    
     multicore_launch_core1(core1_entry);  // start 6502 VM on core 1
-
+  
     while (true) 
     {
+
         frame_start();
-        tud_task();  // TinyUSB device task
-        // generating TOD clock values based on the system time
-        uint64_t now = time_us_64();
-        bool am_pm = (now / 360000000) % 2; // 0 = AM, 1 = PM
-        memory[TOD_10THS_ADDRESS] = to_bcd((now / 100000) % 10);
-        memory[TOD_SECONDS_ADDRESS] = to_bcd((now / 1000000) % 60);
-        memory[TOD_MINUTES_ADDRESS] = to_bcd((now / 60000000) % 60);
-        memory[TOD_HOURS_ADDRESS] = to_bcd((now / 360000000) % 24);
-        memory[TOD_HOURS_ADDRESS] = (memory[TOD_HOURS_ADDRESS] & 0x1F) | (am_pm ? 0x20 : 0x00); // set AM/PM bit
+        // tud_task();  // TinyUSB device task
+        memcpy(sprites, &memory[SPRITE_START_ADDRESS], sizeof(sprites));
+        state.dirty_sprite = false;  // Reset dirty flag
+
         hide_terminal_cursor();
         fill_background_buffer(border_buffer, memory[BORDER_COLOR_ADDRESS]); // Fill border buffer with default background color
         copy_to_screen(border_buffer, 0, 0); // Copy border buffer to screen
@@ -201,21 +211,26 @@ int main()
         uint8_t cur_y = memory[CURSOR_Y_ADDRESS];     // 0..24
         uint8_t cur_enable = memory[CURSOR_ENABLE_ADDRESS];  // 0 = cursor on, otherwise off
         set_cursor_position(cur_x + sox, cur_y + soy);
+
         if (cur_enable == 0) {
-            blink = !blink; // Toggle blink state
             if (blink) {
                 show_cursor(); // Show cursor
             } else {
                 hide_cursor(); // Hide cursor
             }
         }
-        for (int i=0;i<1000;i++)
+
+        for (int i = 0; i < 25; i++)
         {
-            int x = i % 40;
-            int y = i / 40;
-            char_at(x + sox, y + soy, memory[TEXT_SCREEN_START+i]);                
-            color_data[(x + sox) + (y + soy) * FRAME_WIDTH] = memory[COLOR_RAM_START+i];
-            background[(x + sox) + (y + soy) * FRAME_WIDTH] = memory[BACKGROUND_COLOR_ADDRESS];
+            memcpy(&screen[(i + soy) * FRAME_WIDTH + sox], &memory[TEXT_SCREEN_START + i * 40], 40);
+            memcpy(&color_data[(i + soy) * FRAME_WIDTH + sox], &memory[COLOR_RAM_START + i * 40], 40);
+            memset(&background[(i + soy) * FRAME_WIDTH + sox], memory[BACKGROUND_COLOR_ADDRESS], 40);
+        }
+        
+        for (int i = 0; i < SPRITE_LEN; i++) {
+            if (sprites[i].enabled) {
+                blit_sprite_to_screen(&sprites[i]);
+            }
         }
     #if use_host
         send_screen_packet(blink);
@@ -223,8 +238,8 @@ int main()
         render_frame();
     #endif
         frame_end();
-
-        if (timer++ & 0x0F) {
+        if (time_us_64() - timer > 500000) {  // Toggle blink every 500 ms
+            timer = time_us_64();
             blink = !blink; // Toggle blink state
         }
     }
@@ -232,11 +247,10 @@ int main()
 
 void core1_entry() {
  
-    reset_cpu(&state[0]);
+    // multicore_lockout_victim_init();
 
-    uint16_t counter = 0;
-    bool onestep = true;
-    bool irq_fired = false;
+    uint32_t counter = 0;
+    uint32_t mops = 0;
 
     uint32_t dirty_gpio_state     = 0;
     uint32_t dirty_gpio_direction  = 0;
@@ -252,35 +266,59 @@ void core1_entry() {
     uint8_t i2c_ctrl_old  = 0;
     uint8_t i2c_speed_old = 0xFF;  // force first-run init
 
+    uint8_t dma_ctrl_old = 0;
+    uint32_t time_offset = 0;
+
+    uint32_t last_counter = 0;
+
     // DMA channel claim
     dma_channel_claim(DMA_CHANNEL);
     dma_channel_config cfg = dma_channel_get_default_config(DMA_CHANNEL);
-
-    uint8_t dma_ctrl_old = 0;
-
+  
     // Default DMA increment state: both read and write increment (copy mode).
     // memory[] is zero-initialised in C, so without this they default to 0
     // (fixed-address mode) until the user calls DMAINCR explicitly.
     memory[0xD06C] = 1;  // DMA_READ_INC  default = 1
     memory[0xD06D] = 1;  // DMA_WRITE_INC default = 1
 
-    uint32_t time_offset = 0;
+    memory[0xD100] = 0;  // File control register, default = 0 (no file open)
+
+    reset_cpu(&state);
+
+    gpio_init(23);
+    gpio_set_dir(23, false);
+    gpio_pull_up(23);
+
+    uint32_t last_tick_us = time_us_32();  // CIA1 50 Hz IRQ timer
+
 
     while (true) {
+
+        //uint16_t fifty_hz = (state.cia_write.timer_a_control & 0x80) >> 7 ? 20000 : 16667; // 50 / 60 Hz based on bit 7 of Timer A control register
+
+        //if (last_tick_us != time_us_64()) {  // ~50 Hz
+        //  last_tick_us = time_us_64();
+        //  cia_tick(&state);  // tick the CIA timers and TOD clock
+        //}
+
+        if (gpio_get(23) == 0) 
+        {
+            //reset_cpu(&state);
+            reset_cpu(&state);
+        }
         // emulate vic2 raster line counter increment
         if ((counter++ & 0xff) == 0xff){
             memory[0xD012]++;
         }
-
-        if (dirty_gpio_state != state[0].gpio_state)
+        if (dirty_gpio_state != state.gpio_state)
         {
-            gpio_put_masked(state[0].gpio_direction, state[0].gpio_state);  // Update GPIO pins based on the state register
+            gpio_put_masked(state.gpio_direction, state.gpio_state);  // Update GPIO pins based on the state register
         }
 
-        if (dirty_gpio_direction != state[0].gpio_direction)
+        if (dirty_gpio_direction != state.gpio_direction)
         {
-            //gpio_init_mask(state[0].gpio_direction);  // Initialize GPIO pins based on the direction register
-            //gpio_set_dir_masked(state[0].gpio_direction, state[0].gpio_direction);  // Set GPIO pin directions based on the direction register
+            //gpio_init_mask(state.gpio_direction);  // Initialize GPIO pins based on the direction register
+            //gpio_set_dir_masked(state.gpio_direction, state.gpio_direction);  // Set GPIO pin directions based on the direction register
 
             // set GPIO pin directions based on the direction register
             for (int i = 0; i < 32; i++) 
@@ -288,39 +326,43 @@ void core1_entry() {
                 // gpio_init must be called before gpio_set_dir to place the
                 // pin in SIO mode; skip pins that stay as inputs to avoid
                 // disturbing unrelated peripherals.
-                if ((state[0].gpio_direction >> i) & 1) {
+                if ((state.gpio_direction >> i) & 1 && i != 23) {
                     gpio_init(i);
                 }
-                gpio_set_dir(i, (state[0].gpio_direction >> i) & 1);
+                if (i != 23)  // skip pin 23 to avoid disturbing the RUN/STOP key
+                {
+                gpio_set_dir(i, (state.gpio_direction >> i) & 1);
+                }
             }
         }
 
-        if (dirty_gpio_pullup != state[0].gpio_pullup)
+        if (dirty_gpio_pullup != state.gpio_pullup)
         {
             // set GPIO pin pull-up resistors based on the pull-up register
             for (int i = 0; i < 32; i++) 
             {
-                if ((state[0].gpio_pullup >> i) & 1u) 
+                if (i != 23)  // skip pin 23 to avoid disturbing the RUN/STOP key
                 {
-                    gpio_pull_up(i);
-                } 
-                else 
-                {
-                    gpio_disable_pulls(i);
+                    if ((state.gpio_pullup >> i) & 1u) 
+                    {
+                        gpio_pull_up(i);
+                    } 
+                    else 
+                    {
+                        gpio_disable_pulls(i);
+                    }
                 }
             }
         }
+        execute_opcode(&state, read_memory(&state, state.program_counter));
+        dirty_gpio_state      = state.gpio_state;
+        dirty_gpio_direction  = state.gpio_direction;
+        dirty_gpio_pullup     = state.gpio_pullup;
 
-        execute_opcode(&state[0], read_memory(&state[0], state[0].program_counter));
- 
-        dirty_gpio_state      = state[0].gpio_state;
-        dirty_gpio_direction  = state[0].gpio_direction;
-        dirty_gpio_pullup     = state[0].gpio_pullup;
-
-        state[0].gpio_state     = memory[GPIO_STATE_ADDRESS] | (memory[GPIO_STATE_ADDRESS + 1] << 8) | (memory[GPIO_STATE_ADDRESS     + 2] << 16) | (memory[GPIO_STATE_ADDRESS     + 3] << 24);
-        state[0].gpio_direction = memory[GPIO_DIRECTION_ADDRESS] | (memory[GPIO_DIRECTION_ADDRESS + 1] << 8) | (memory[GPIO_DIRECTION_ADDRESS + 2] << 16) | (memory[GPIO_DIRECTION_ADDRESS + 3] << 24);
-        state[0].gpio_pullup    = memory[GPIO_PULLUP_ADDRESS] | (memory[GPIO_PULLUP_ADDRESS + 1] << 8) | (memory[GPIO_PULLUP_ADDRESS + 2] << 16) | (memory[GPIO_PULLUP_ADDRESS + 3] << 24);
-
+        state.gpio_state     = memory[GPIO_STATE_ADDRESS] | (memory[GPIO_STATE_ADDRESS + 1] << 8) | (memory[GPIO_STATE_ADDRESS     + 2] << 16) | (memory[GPIO_STATE_ADDRESS     + 3] << 24);
+        state.gpio_direction = memory[GPIO_DIRECTION_ADDRESS] | (memory[GPIO_DIRECTION_ADDRESS + 1] << 8) | (memory[GPIO_DIRECTION_ADDRESS + 2] << 16) | (memory[GPIO_DIRECTION_ADDRESS + 3] << 24);
+        state.gpio_pullup    = memory[GPIO_PULLUP_ADDRESS] | (memory[GPIO_PULLUP_ADDRESS + 1] << 8) | (memory[GPIO_PULLUP_ADDRESS + 2] << 16) | (memory[GPIO_PULLUP_ADDRESS + 3] << 24);
+        
         // ── PWM update ───────────────────────────────────────────────────────
         {
             uint8_t  sel        = memory[PWM_SELECT_ADDR] & 0x0F;  // slice 0-11
@@ -414,11 +456,12 @@ void core1_entry() {
                 channel_config_set_read_increment(&cfg, memory[DMA_READ_INC_ADDR] ? true : false);
                 channel_config_set_write_increment(&cfg, memory[DMA_WRITE_INC_ADDR] ? true : false);
                 channel_config_set_dreq(&cfg, DREQ_FORCE);
+                channel_config_set_irq_quiet(&cfg, true);
 
                 // Biztonsági ellenőrzés
                 if ((src + count) <= sizeof(memory) &&
-                    (dst + count) <= sizeof(memory)) {
-                    
+                    (dst + count) <= sizeof(memory)) 
+                {
                     dma_channel_configure(
                         DMA_CHANNEL,
                         &cfg,
@@ -427,14 +470,19 @@ void core1_entry() {
                         count,
                         true
                     );
-
-                    memory[DMA_CTRL_ADDR] = 0x80;    // busy
-                } else {
-                    // Érvénytelen tartomány
-                    memory[DMA_CTRL_ADDR] = 0x00;
                 }
             }
+            if (dma_channel_is_busy(DMA_CHANNEL)) {
+                memory[DMA_CTRL_ADDR] |= 0x80;  // busy
+            } else {
+                memory[DMA_CTRL_ADDR] &= ~0x80; // not busy
+            }
+        }
+ 
+        if (last_tick_us + 1000 <= time_us_32()) {
+            state.mops = counter - last_counter;
+            last_counter = counter;
+            last_tick_us = time_us_32();
         }
     }
- 
 }

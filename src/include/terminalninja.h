@@ -9,13 +9,18 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <time.h>
+#include "tusb.h"
+#include "pico/stdlib.h"
+#include "tusb_config.h"
 #include <inttypes.h>
 #include <unistd.h>
+#include "memmap.h"
 
 #define F_W 40  
 #define F_H 25
 
 #define DEBUG 0
+#define terminal_cursor 0
 
 void restore_terminal();
 // with pico-sdk the time_us_32() function is already defined in pico/time.h
@@ -50,6 +55,7 @@ typedef struct{
     int background_color;
     char *title;
 }window_t;
+
 
 #define INPUT_SIZE 20
 
@@ -657,7 +663,7 @@ static inline int read_input(input_queue_t *q)
 
 void frame_end() {
     if (fps_lock) {
-        uint64_t target_time = current_time + target_frame_ns; // Target time for 60 FPS
+        uint32_t target_time = current_time + target_frame_ns; // Target time for 60 FPS
         // wait_until(target_time);
         while (time_us_32() < target_time) {
             // Busy wait
@@ -750,11 +756,13 @@ void _render_line(int y, bool crlf) {
         int _pos = (y) * FRAME_WIDTH + (x);
         uint8_t color = color_data[_pos];
         uint8_t background_color = background[_pos];
+        #if terminal_cursor == 0
         bool is_cursor_position = (cursor_enable && cursor_x == x && cursor_y == y);
         if (is_cursor_position) {
             APPEND("\033[7m"); // Invert colors for cursor position
             total_bytes_sent += 4; // For the escape sequence
         }
+        #endif
         if (color != old_color) {
             APPEND("\033[38;2;%u;%u;%um", palette[color][0], palette[color][1], palette[color][2]);
             total_bytes_sent += 19;
@@ -773,12 +781,14 @@ void _render_line(int y, bool crlf) {
             APPEND("%s", c64_to_utf8[screen[_pos]]);
         }
         total_bytes_sent += 1;
+        #if terminal_cursor == 0
         if (is_cursor_position) {
             APPEND("\033[0m"); // Reapply invert colors for cursor position
             old_color = 0xFF; // Reset old_color to force color change on next iteration
             old_background_color = 0xFF; // Reset old_background_color to force background color change on next iteration
             total_bytes_sent += 4; // For the escape sequence
         }
+        #endif
     }
     if (crlf)
     {
@@ -823,9 +833,15 @@ void render_frame() {
     }
     APPEND("FPS lock: %s\033[K", fps_lock ? "ON" : "OFF");
     #endif
+    #if terminal_cursor == 1
+        // enable cursor and move it to the specified position
+        APPEND("\033[?25h"); // Enable cursor
+        APPEND("\033[%d;%dH", cursor_y + 1, cursor_x + 1); // Move cursor to the specified position
+    #endif
     // line_buffer[_position++] = '\n';
     line_buffer[_position] = '\0'; // Null-terminate the string
-    puts(line_buffer); // Use puts to write the entire buffer at once
+    memory[0xD013] = 1;
+    fwrite(line_buffer, 1, _position, stdout); // Use fwrite to write the entire buffer at once
     fflush(stdout);
     frame_time = time_us_32() - now;
 }
@@ -1000,7 +1016,7 @@ void blit_to_background(Buffer *buffer, int x, int y) {
                 continue; // Skip out-of-bounds pixels
             }
             if (pixel != buffer->transparent_char) {
-                background[py * FRAME_WIDTH + px] = buffer->color_data[pos];
+                background[py * FRAME_WIDTH + px] = buffer->background_data[pos];
             }
         }
     }
@@ -1144,6 +1160,69 @@ void printf_big_atc(int x, int y, uint8_t color, BufferType type, const char *fm
         cursor_x += glyph->width;
     }
 }
+
+SpriteAsset_t *create_sprite_asset(int width, int height, char transparent_color) {
+    SpriteAsset_t *sprite = (SpriteAsset_t *)malloc(sizeof(SpriteAsset_t));
+    sprite->width = width;
+    sprite->height = height;
+    sprite->transparency_color = transparent_color;
+    sprite->enabled = false;
+    return sprite;
+}
+
+void set_sprite_pixels(SpriteAsset_t *sprite, uint8_t *pixel_color) {
+    memcpy(&memory[sprite->pixel_color], pixel_color, sprite->width * sprite->height);
+}
+
+void blit_sprite_to_screen(SpriteAsset_t *sprite) {
+    if(sprite == NULL || !sprite->enabled) {
+        return;
+    }
+    for (int by = 0; by < sprite->height; by+=2) {
+        for (int bx = 0; bx < sprite->width; bx++) {
+
+            int sprite_pos_top = by * sprite->width + bx;
+            int sprite_pos_bottom = (by + 1) * sprite->width + bx;
+            int screen_pos = (sprite->y + (int)(by/2)) * FRAME_WIDTH + (sprite->x + bx);
+            int px = sprite->x + bx;
+            int py = sprite->y + (int)(by/2);
+
+            if (px < 0 || py < 0 || px >= FRAME_WIDTH || py >= FRAME_HEIGHT) {
+                continue;
+            }
+
+            uint8_t trans = sprite->transparency_color;
+            uint8_t top_pixel = memory[sprite->pixel_color + sprite_pos_top];
+            uint8_t bottom_pixel = memory[sprite->pixel_color + sprite_pos_bottom];
+
+            uint8_t pixel = 0;
+            pixel |= (top_pixel != trans) ? 1 : 0;
+            pixel |= (bottom_pixel != trans) ? 2 : 0;
+
+            switch (pixel) {
+                case 0: // Mindkét pixel átlátszó
+                    break;
+
+                case 1: // Csak felső pixel
+                    screen[screen_pos] = 0x4A;          // felső fél blokk
+                    color_data[screen_pos] = top_pixel;
+                    break;
+
+                case 2: // Csak alsó pixel
+                    screen[screen_pos] = 0x49;          // alsó fél blokk
+                    color_data[screen_pos] = bottom_pixel;
+                    break;
+
+                case 3: // Mindkét pixel
+                    screen[screen_pos] = 0x4a;          // teljes blokk
+                    color_data[screen_pos] = top_pixel;
+                    background[screen_pos] = bottom_pixel;
+                    break;
+            }
+        }
+    }
+}
+
 
 void printf_add_big_atc(int x, int y, uint8_t color, const char *fmt, ...)
 {
@@ -1296,4 +1375,4 @@ void set_palette(const uint8_t new_palette[][3], int src_len)
     }
 }
 
-#endif // TERMINALNINJA_H
+#endif

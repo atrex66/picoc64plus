@@ -2,10 +2,9 @@
 
 Program the Pico peripherals like in the 80's
 
-The emulator do not try to emulate the real hardware there is no VIC2 or CIA chips emulation
-the 6502 speed with a Pico is ~3.8 MOPS on a standard Pico2 it is ~4.01 MOPS
+The emulator do not try to emulate the real hardware there is no VIC2 or CIA chips emulation.
 
-**The Basic extension currently needs to be enabled by SYS 49152**
+**The Basic extension autostart now (8k cartridge on $8000)**
 
 **You can load basic programs from your PC trough PUTTY** by copy the code to the clipboard (ctrl+c)
 and press shift+ins in the terminal program to paste the basic program trough the terminal,
@@ -23,7 +22,6 @@ You can find the precompiled binary .uf2 file for Pico and Pico2 under the relea
 - Memory-mapped hardware registers — same hardware also accessible via `PEEK`/`POKE`
 - **Host terminal — Recommended to use PUTTY for maximum compatibility (full color mode) **
 - Runs entirely from **SRAM** (`copy_to_ram`) for maximum speed
-- To activate the basic extension need to run the commnad SYS 49152
 - support of rendering sprites on the terminal (2pixel on one glyph) max 64 sprites with 255x255 size and 256 colors
 - the terminal sprite registers are in the shadow ram from $A000 you can write it but can not read back because it is ROM area
 - 'MEMMAP.md'
@@ -36,11 +34,14 @@ You can find the precompiled binary .uf2 file for Pico and Pico2 under the relea
 
 ## Hardware
 
-| Component | Details |
-|-----------|---------|
-| MCU | Raspberry Pi Pico 2 (RP2350) |
-| I/O | USB CDC serial — use the included SDL2 terminal or PuTTY |
-| I2C | GP4 (SDA) / GP5 (SCL), pull-ups enabled automatically |
+|----------------------------------------------------------------------|
+| Component | Details                                                  |
+|-----------|----------------------------------------------------------|
+| MCU       | Raspberry Pi Pico 2 (RP2350)                             |
+| I/O       | USB CDC serial — use the included SDL2 terminal or PuTTY |
+| I2C       | GP4 (SDA) / GP5 (SCL), pull-ups enabled automatically    |
+| DMA       | DMA channel 11 dedicated for the virtual machine         |
+|----------------------------------------------------------------------|
 
 ---
 

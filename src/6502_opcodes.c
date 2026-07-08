@@ -1,10 +1,21 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdbool.h>
+#include "pico/time.h"
+#include "pico/stdlib.h"
+#include "hardware/gpio.h"
+#include "hardware/dma.h"
+#include "hardware/adc.h"
+#include "hardware/pwm.h"
 #include "6502_opcodes.h"
+#include "syscalls.h"
 #include "c64-roms.h"
 #include "basicext.h"
 #include "memmap.h"
+#include "enums.h"
+#include "structs.h"
+#include "syscalls.h"
 
 uint8_t memory[MEMORY_SIZE];
 
@@ -62,11 +73,51 @@ void reset_cpu(CPUState *state) {
     state->break_command = false;
     state->IRQ_input = false;
     state->NMI_input = false;
+    state->dirty_screen = false;
+    state->dirty_sprite = false;
+    state->halt_flag = false;
+    state->pico_irq_source = 0;
+    // deinitialize GPIO pins 0-31 to SIO function
+    for (int i = 0; i < 32;i++){
+        gpio_set_function(i, GPIO_FUNC_SIO);
+    }
     #if debug
     printf("CPU Reset: PC=%04X SP=%02X\n", state->program_counter, state->stack_pointer);
     #endif
 }
 
+void push_stack(CPUState *state, uint8_t value) {
+    write_memory(state, STACK_BASE + state->stack_pointer, value);
+    state->stack_pointer--;
+}
+
+__attribute__((always_inline)) inline uint8_t pop_stack(CPUState *state) {
+    state->stack_pointer++;
+    return read_memory(state, STACK_BASE + state->stack_pointer);
+}
+
+void push_stack_16(CPUState *state, uint16_t value) {
+    push_stack(state, (value >> 8) & 0xFF); 
+    push_stack(state, value & 0xFF);        
+}
+
+__attribute__((always_inline)) inline uint16_t pop_stack_16(CPUState *state) {
+    uint8_t low_byte = pop_stack(state);
+    uint8_t high_byte = pop_stack(state);
+    return (high_byte << 8) | low_byte;
+}
+
+void SYSCALL(CPUState *state) {
+    uint8_t opcode = read_memory(state, state->program_counter+1);
+    if (arm_opcode_functions[opcode]) {
+        arm_opcode_functions[opcode](state);
+    } else {
+        snprintf(state->disassembly, sizeof(state->disassembly), "$%04X: SYSCALL $%04X", state->program_counter - 3, opcode);
+        state->halt_reason = SYSCALL_REASON;
+        state->halt_flag = true;
+    }
+    state->program_counter = state->program_counter + 2;
+}
 
 void BCD_ADD(CPUState *state, uint8_t value) {
     uint16_t binary_sum = state->accumulator + value + (state->carry_flag ? 1 : 0);
@@ -573,10 +624,8 @@ void BPL(CPUState *state) {  // eg: BPL $00
 void BRK(CPUState *state) {  // eg: BRK
     state->break_command = true;
     state->program_counter += 2;  
-    write_memory(state, STACK_BASE + state->stack_pointer, (state->program_counter >> 8) & 0xFF);
-    state->stack_pointer--;
-    write_memory(state, STACK_BASE + state->stack_pointer, state->program_counter & 0xFF);
-    state->stack_pointer--;
+    push_stack(state, (state->program_counter >> 8) & 0xFF);
+    push_stack(state, state->program_counter & 0xFF);
     uint8_t brk_status = ((uint8_t)state->negative_flag     << 7)
                        | ((uint8_t)state->overflow_flag     << 6)
                        | (1                                 << 5)
@@ -585,8 +634,7 @@ void BRK(CPUState *state) {  // eg: BRK
                        | ((uint8_t)state->interrupt_disable << 2)
                        | ((uint8_t)state->zero_flag         << 1)
                        |  (uint8_t)state->carry_flag;
-    write_memory(state, STACK_BASE + state->stack_pointer, brk_status);
-    state->stack_pointer--;
+    push_stack(state, brk_status);
     state->interrupt_disable = 1;
     state->program_counter = read_memory(state, 0x316) | (read_memory(state, 0x317) << 8);  
     #if debug
@@ -1119,10 +1167,8 @@ void JMP_INDIRECT(CPUState *state) {  // eg: JMP ($0000)
 
 void JSR(CPUState *state) {  // eg: JSR $0000
     uint16_t return_address = state->program_counter + 2; 
-    write_memory(state, STACK_BASE + state->stack_pointer, (return_address >> 8) & 0xFF); 
-    state->stack_pointer--; 
-    write_memory(state, STACK_BASE + state->stack_pointer, return_address & 0xFF); 
-    state->stack_pointer--; 
+    push_stack(state, (return_address >> 8) & 0xFF); 
+    push_stack(state, return_address & 0xFF);
     temp_address = read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8); 
     state->program_counter = temp_address; 
     #if debug
@@ -1559,8 +1605,7 @@ void ORA_INDIRECT_Y(CPUState *state) {  // eg: ORA ($00),Y
 }
 
 void PHA(CPUState *state) {  // eg: PHA
-    write_memory(state, STACK_BASE + state->stack_pointer, state->accumulator); 
-    state->stack_pointer--; 
+    push_stack(state, state->accumulator);
     state->program_counter += 1; 
     #if debug
     snprintf(state->disassembly, sizeof(state->disassembly), "$%04X: PHA", state->program_counter - 1);
@@ -1576,8 +1621,7 @@ void PHP(CPUState *state) {  // eg: PHP
                    | ((uint8_t)state->interrupt_disable << 2)
                    | ((uint8_t)state->zero_flag         << 1)
                    |  (uint8_t)state->carry_flag;
-    write_memory(state, STACK_BASE + state->stack_pointer, status);
-    state->stack_pointer--;
+    push_stack(state, status);
     state->program_counter += 1;
     #if debug
     snprintf(state->disassembly, sizeof(state->disassembly), "$%04X: PHP", state->program_counter - 1);
@@ -1585,8 +1629,7 @@ void PHP(CPUState *state) {  // eg: PHP
 }
 
 void PLA(CPUState *state) {  // eg: PLA
-    state->stack_pointer++; 
-    state->accumulator = read_memory(state, STACK_BASE + state->stack_pointer); 
+    state->accumulator = pop_stack(state);
     state->zero_flag = (state->accumulator == 0); 
     state->negative_flag = (state->accumulator & 0x80) != 0; 
     state->program_counter += 1; 
@@ -1596,8 +1639,7 @@ void PLA(CPUState *state) {  // eg: PLA
 }
 
 void PLP(CPUState *state) {  // eg: PLP
-    state->stack_pointer++; 
-    uint8_t status = read_memory(state, STACK_BASE + state->stack_pointer); 
+    uint8_t status = pop_stack(state);
     state->negative_flag = (status >> 7) & 1; 
     state->overflow_flag = (status >> 6) & 1; 
     state->break_command = (status >> 4) & 1; 
@@ -1740,8 +1782,7 @@ void ROR_ABSOLUTE_X(CPUState *state) {  // eg: ROR $0000,X
 }
 
 void RTI(CPUState *state) {  // eg: RTI
-    state->stack_pointer++; 
-    uint8_t status = read_memory(state, STACK_BASE + state->stack_pointer); 
+    uint8_t status = pop_stack(state);
     state->negative_flag = (status >> 7) & 1; 
     state->overflow_flag = (status >> 6) & 1; 
     state->break_command = (status >> 4) & 1; 
@@ -1749,12 +1790,8 @@ void RTI(CPUState *state) {  // eg: RTI
     state->interrupt_disable = (status >> 2) & 1; 
     state->zero_flag = (status >> 1) & 1; 
     state->carry_flag = status & 1; 
-
-    state->stack_pointer++; 
-    uint8_t low_byte = read_memory(state, STACK_BASE + state->stack_pointer); 
-    state->stack_pointer++; 
-    uint8_t high_byte = read_memory(state, STACK_BASE + state->stack_pointer); 
-
+    uint8_t low_byte = pop_stack(state); 
+    uint8_t high_byte = pop_stack(state);
     state->program_counter = (high_byte << 8) | low_byte; 
     #if debug
     snprintf(state->disassembly, sizeof(state->disassembly), "$%04X: RTI", state->program_counter);
@@ -1762,11 +1799,7 @@ void RTI(CPUState *state) {  // eg: RTI
 }
 
 void RTS(CPUState *state) {  // eg: RTS
-    state->stack_pointer++; 
-    uint8_t low_byte = read_memory(state, STACK_BASE + state->stack_pointer); 
-    state->stack_pointer++; 
-    uint8_t high_byte = read_memory(state, STACK_BASE + state->stack_pointer); 
-    state->program_counter = ((high_byte << 8) | low_byte) + 1; 
+    state->program_counter = pop_stack_16(state) + 1;
     #if debug
     snprintf(state->disassembly, sizeof(state->disassembly), "$%04X: RTS", state->program_counter - 1);
     #endif
@@ -2148,12 +2181,9 @@ void trigger_irq(CPUState *state, uint16_t irq_source) {
                    | ((uint8_t)state->zero_flag         << 1)
                    |  (uint8_t)state->carry_flag;
 
-    write_memory(state, STACK_BASE + state->stack_pointer, (state->program_counter >> 8) & 0xFF);
-    state->stack_pointer--;
-    write_memory(state, STACK_BASE + state->stack_pointer, state->program_counter & 0xFF);
-    state->stack_pointer--;
-    write_memory(state, STACK_BASE + state->stack_pointer, status);
-    state->stack_pointer--;
+    push_stack(state, (state->program_counter >> 8) & 0xFF);
+    push_stack(state, state->program_counter & 0xFF);
+    push_stack(state, status);
     state->program_counter = irq_source;
 }
 
@@ -2178,6 +2208,7 @@ void (*opcode_functions[256])(CPUState *state) = {
     [0x1A] = ASL_ABSOLUTE_Y,
     [0x1D] = ORA_ABSOLUTE_X,
     [0x1E] = ASL_ABSOLUTE_X,
+    [0x19] = SYSCALL,               // you can call c routine from here
     [0x20] = JSR,
     [0x21] = AND_INDIRECT_X,
     [0x24] = BIT_ZEROPAGE,
@@ -2320,11 +2351,10 @@ void (*opcode_functions[256])(CPUState *state) = {
 
 void execute_opcode(CPUState *state, uint8_t opcode) {
 
-    /*
     if (state->NMI_input) {
         state->NMI_input = 0; 
         #if debug
-        snprintf(state->disassembly, sizeof(state->disassembly), "$%04X: NMI", state->program_counter);
+        snprintf(state->disassembly, sizeof(state->disassembly), "$%04X: NMI", state->nmi_vector);
         #endif
         trigger_irq(state, state->nmi_vector);
         return;
@@ -2333,15 +2363,17 @@ void execute_opcode(CPUState *state, uint8_t opcode) {
     if (state->IRQ_input) {
         state->IRQ_input = false; 
         #if debug
-        snprintf(state->disassembly, sizeof(state->disassembly), "$%04X: IRQ", state->program_counter);
+        snprintf(state->disassembly, sizeof(state->disassembly), "$%04X: IRQ", state->irq_vector);
         #endif
         trigger_irq(state, state->irq_vector);
         return;
     }
-    */
+
     if (opcode_functions[opcode]) {
         opcode_functions[opcode](state);
     } else {
-        snprintf(state->disassembly, sizeof(state->disassembly), "$%04X: ??? (Unknown opcode 0x%02X)", state->program_counter, opcode);
+        snprintf(state->disassembly, sizeof(state->disassembly), "$%04X: ??? (Unknown opcode #$%02X)", state->program_counter, opcode);
+        state->halt_reason = ILLEGAL_OPCODE_REASON;
+        state->halt_flag = true;
     }
 }

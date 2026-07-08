@@ -37,11 +37,15 @@ pico_sdk_init()
 add_executable(c64_plus 
         src/6502_opcodes.c
         src/c64basic_emu.c
+        src/syscalls.c
+        src/modules/pwm.c
         #libs/pico-lfs/src/pico_lfs.c
         )
 
 pico_set_program_name(c64_plus "c64_plus")
 pico_set_program_version(c64_plus "0.1")
+
+#pico_enable_stdio_usb(c64_plus 1)
 
 # Copy entire binary to SRAM and run from there (no XIP cache pressure)
 pico_set_binary_type(c64_plus copy_to_ram)
@@ -76,10 +80,15 @@ target_link_libraries(c64_plus
         hardware_pwm
         hardware_i2c
         hardware_dma
+        hardware_adc
 #        pico-lfs
         )
 
 pico_add_extra_outputs(c64_plus)
+
+target_compile_definitions(c64_plus PRIVATE
+    PICO_STDIO_USB_RESET_INTERFACE_SUPPORT=1
+)
 
 target_compile_options(c64_plus PRIVATE 
     -O3

@@ -70,31 +70,27 @@ PRINT PINGET(10)     : REM prints 0 or 1
 
 ## PWM — Pulse Width Modulation
 
-The RP2350 has 12 PWM slices, each with two channels (A and B).
+The RP2350 has 8 PWM slices, each with two channels (A and B).
 
-| Slice | Channel A | Channel B |
-|-------|-----------|-----------|
-| 0     | GP0       | GP1       |
-| 1     | GP2       | GP3       |
-| 2     | GP4       | GP5       |
-| 3     | GP6       | GP7       |
-| 4     | GP8       | GP9       |
-| 5     | GP10      | GP11      |
-| 6     | GP12      | GP13      |
-| 7     | GP14      | GP15      |
-| 8     | GP16      | GP17      |
-| 9     | GP18      | GP19      |
-| 10    | GP20      | GP21      |
-| 11    | GP22      | GP23      |
-
+| Slice | Channel A | Channel B | Channel A | Channel B |
+|-------|-----------|-----------|-----------|-----------|
+| 0     | GP0       | GP1       | GP16      | GP17      |
+| 1     | GP2       | GP3       | GP18      | GP19      |
+| 2     | GP4       | GP5       | GP20      | GP21      |
+| 3     | GP6       | GP7       | GP22      | GP23      |
+| 4     | GP8       | GP9       | GP24      | GP25      |
+| 5     | GP10      | GP11      | GP26      | GP27      |
+| 6     | GP12      | GP13      | GP28      | GP29      |
+| 7     | GP14      | GP15      | GP30      | GP31      |
+--------------------------------------------------------|
 ---
 
 ### `PWMSEL slice`
 Select the active PWM slice for subsequent `PWMWRP` and `PWMLVL` commands.
 
-| Argument | Range | Description |
-|----------|-------|-------------|
-| `slice`  | 0–11  | PWM slice number |
+| Argument | Range | Description      |
+|----------|-------|------------------|
+| `slice`  | 0–7   | PWM slice number |
 
 ```basic
 PWMSEL 0             : REM configure slice 0 (GP0/GP1)
@@ -106,8 +102,8 @@ PWMSEL 0             : REM configure slice 0 (GP0/GP1)
 Set the counter wrap (top) value for the selected slice. This controls the
 PWM period and resolution.
 
-| Argument | Range    | Description |
-|----------|----------|-------------|
+| Argument | Range    | Description       |
+|----------|----------|-------------------|
 | `wrap`   | 1–65535  | Counter top value |
 
 ```basic
@@ -121,8 +117,8 @@ PWMWRP 46874         : REM ~20 ms period at 150 MHz / div 64 (50 Hz servo)
 Set the duty-cycle level for channel A (`0`) or B (`1`) of the selected
 slice. `level` ranges from `0` (always off) to `wrap` (always on).
 
-| Argument | Range   | Description |
-|----------|---------|-------------|
+| Argument | Range   | Description                      |
+|----------|---------|----------------------------------|
 | `chan`   | 0–1     | `0` = channel A, `1` = channel B |
 | `level`  | 0–65535 | Duty cycle (0 = 0%, wrap = 100%) |
 

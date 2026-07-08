@@ -56,7 +56,6 @@ typedef struct{
     char *title;
 }window_t;
 
-
 #define INPUT_SIZE 20
 
 typedef struct {
@@ -621,16 +620,16 @@ void infinite_loop() {
 }
 
 // Convert terminal ASCII to C64 PETSCII (uppercase mode)
-static uint8_t ascii_to_petscii(char c) {
+static uint8_t ascii_to_petscii(uint8_t c) {
     // Lowercase a-z -> uppercase A-Z (PETSCII uppercase/graphics mode)
-    if (c >= 'a' && c <= 'z') return (uint8_t)(c - 0x20);
+    // if (c >= 'a' && c <= 'z') return (uint8_t)(c - 0x20);
     // Return / linefeed -> PETSCII RETURN
-    if (c == '\r' || c == '\n') return 0x0D;
+    // if (c == '\r' || c == '\n') return 0x0D;
     // Backspace / DEL -> PETSCII DEL (C64 backspace)
-    if (c == 0x08 || c == 0x7F) return 0x14;
+    if (c == 0x7F) return 0x14;
     // Printable ASCII $20-$5F map 1:1 to PETSCII
-    if (c >= 0x20 && c <= 0x5F) return (uint8_t)c;
-    return 0;
+    // if (c >= 0x20 && c <= 0x5F) return (uint8_t)c;
+    return (uint8_t)c; // Return as-is for other characters
 }
 
 void set_framerate(int fps) {
@@ -757,12 +756,13 @@ void _render_line(int y, bool crlf) {
         uint8_t color = color_data[_pos];
         uint8_t background_color = background[_pos];
         #if terminal_cursor == 0
-        bool is_cursor_position = (cursor_enable && cursor_x == x && cursor_y == y);
-        if (is_cursor_position) {
-            APPEND("\033[7m"); // Invert colors for cursor position
-            total_bytes_sent += 4; // For the escape sequence
-        }
+            bool is_cursor_position = (cursor_enable && cursor_x == x && cursor_y == y);
+            if (is_cursor_position) {
+                APPEND("\033[7m"); // Invert colors for cursor position
+                total_bytes_sent += 4; // For the escape sequence
+            }
         #endif
+
         if (color != old_color) {
             APPEND("\033[38;2;%u;%u;%um", palette[color][0], palette[color][1], palette[color][2]);
             total_bytes_sent += 19;
@@ -1372,6 +1372,25 @@ void set_palette(const uint8_t new_palette[][3], int src_len)
         palette[i][0] = new_palette[j][0];
         palette[i][1] = new_palette[j][1];
         palette[i][2] = new_palette[j][2];
+    }
+}
+
+void create_window(int x, int y, int width, int height, uint8_t border_color, uint8_t background_color) {
+    // Draw top and bottom borders
+    for (int i = 0; i < width; i++) {
+        char_atc(x + i, y, border_color, '-'); // Top border
+        char_atc(x + i, y + height - 1, border_color, '-'); // Bottom border
+    }
+    // Draw left and right borders
+    for (int j = 0; j < height; j++) {
+        char_atc(x, y + j, border_color, '|'); // Left border
+        char_atc(x + width - 1, y + j, border_color, '|'); // Right border
+    }
+    // Fill the inside of the window with the background color
+    for (int j = 1; j < height - 1; j++) {
+        for (int i = 1; i < width - 1; i++) {
+            char_atc(x + i, y + j, background_color, ' '); // Fill with space character
+        }
     }
 }
 

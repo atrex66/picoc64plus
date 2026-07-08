@@ -12,6 +12,9 @@ there is no screen refresh when the program loading, no worry its not freezing j
 
 You can find the precompiled binary .uf2 file for Pico and Pico2 under the releases.
 
+** There are some compromises because of the terminal mode ** you only input uppercase from the terminal
+even if the Caps-Lock or Shift is not pressed, this means the shifted and special characters 
+are only accesible from CHR$ commands, because the pico only get the escaped key codes and the 
 ---
 
 ## Features
@@ -173,7 +176,7 @@ The same hardware is also accessible via `PEEK`/`POKE` for machine-code programs
 | Address | Register | Description |
 |---------|----------|-------------|
 | `$D040` | `PWM_ENABLE` | Slice enable bitmask |
-| `$D041` | `PWM_SELECT` | Active slice index (0–11) |
+| `$D041` | `PWM_SELECT` | Active slice index (0–7) |
 | `$D042–$D043` | `PWM_WRAP` | Counter top, lo/hi byte |
 | `$D044–$D045` | `PWM_LEVEL_A` | Channel A duty, lo/hi byte |
 | `$D046–$D047` | `PWM_LEVEL_B` | Channel B duty, lo/hi byte |

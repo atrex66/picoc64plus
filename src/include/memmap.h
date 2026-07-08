@@ -1,6 +1,22 @@
 #ifndef MEMMAP_H
 #define MEMMAP_H
 
+#define turbo_mode 0
+#define use_host 0
+
+// ── Overclocking settings ────────────────────────────────────────────────────
+// Adjust these two defines to tune performance / stability.
+// RP2350 default: 150 MHz @ VREG_VOLTAGE_1_10
+// Tested stable:  300 MHz @ VREG_VOLTAGE_1_20  (flash speed irrelevant: copy_to_ram)
+#if turbo_mode
+    #define CPU_CLOCK_KHZ   300000              // target system clock in kHz
+    #define CPU_CORE_VOLTAGE VREG_VOLTAGE_1_30  // core voltage (see hardware/vreg.h)
+#else
+    #define CPU_CLOCK_KHZ   150000              // target system clock in kHz
+    #define CPU_CORE_VOLTAGE VREG_VOLTAGE_1_10  // core voltage (see hardware/vreg.h)
+#endif
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ── C64 memory-mapped addresses ───────────────────────────────────────────────
 #define KEY_BUFFER               0x0277
 #define KEY_COUNT                0x00C6
@@ -11,6 +27,7 @@
 #define CURSOR_ENABLE_ADDRESS    0xCC
 
 #define RASTER_LINE              0xD012
+#define FRAME_READY_ADDRESS      0xD013
 
 #define TEXT_SCREEN_START        0x0400
 #define COLOR_RAM_START          0xD800
@@ -74,26 +91,6 @@ typedef struct __attribute__((packed))
 #define GPIO_DIRECTION_ADDRESS 0xD033  // 4 bytes LE: GPIO direction 1=out (dec 53299)
 #define GPIO_PULLUP_ADDRESS    0xD037  // 4 bytes LE: GPIO pull-up enable  (dec 53303)
 
-// ── PWM memory-mapped registers ($D040-$D047) ────────────────────────────────
-// Pico 2 has 12 PWM slices; slice N drives GPIO N*2 (ch A) and GPIO N*2+1 (ch B).
-//
-//  $D040  PWM_ENABLE    - bitmask: bit N = enable slice N
-//  $D041  PWM_SELECT    - active slice index to configure (0-11)
-//  $D042  PWM_WRAP_LO   - wrap (top) counter value, low  byte  (default 65535)
-//  $D043  PWM_WRAP_HI   - wrap (top) counter value, high byte
-//  $D044  PWM_LEVEL_A_LO- channel A duty cycle, low  byte  (0 .. wrap)
-//  $D045  PWM_LEVEL_A_HI- channel A duty cycle, high byte
-//  $D046  PWM_LEVEL_B_LO- channel B duty cycle, low  byte
-//  $D047  PWM_LEVEL_B_HI- channel B duty cycle, high byte
-#define PWM_ENABLE_ADDR    0xD040
-#define PWM_SELECT_ADDR    0xD041
-#define PWM_WRAP_LO_ADDR   0xD042
-#define PWM_WRAP_HI_ADDR   0xD043
-#define PWM_LEVEL_A_LO_ADDR 0xD044
-#define PWM_LEVEL_A_HI_ADDR 0xD045
-#define PWM_LEVEL_B_LO_ADDR 0xD046
-#define PWM_LEVEL_B_HI_ADDR 0xD047
-
 // ── I2C memory-mapped registers ($D050-$D05B) ────────────────────────────────
 // Uses I2C0, SDA=GPIO4, SCL=GPIO5 by default.
 //
@@ -141,6 +138,9 @@ typedef struct __attribute__((packed))
 #define DMA_WRITE_INC_ADDR  0xD06D
 
 #define DMA_CHANNEL 11  // RP2350 DMA channel reserved for 6502 use
+
+#define TIMER_ZERO_ADDRESS 0xD06E  // 1 bytes, zeroing the timer
+#define US_TIMER_ADDRESS 0xD06F  // 4 bytes, LE, microsecond timer (wraps around every ~71 minutes)
 
 // littlefs handler saves all files in .prg format so the first two bytes are the load address (little-endian) and the rest is the file data
 #define FILE_CONTROL_COMMAND 0xD100

@@ -70,7 +70,7 @@ PRINT PINGET(10)     : REM prints 0 or 1
 
 ## PWM — Pulse Width Modulation
 
-The RP2350 has 8 PWM slices, each with two channels (A and B).
+The RP2350 has 8 PWM pins, each with two channels (A and B).
 
 | Slice | Channel A | Channel B | Channel A | Channel B |
 |-------|-----------|-----------|-----------|-----------|
@@ -85,93 +85,69 @@ The RP2350 has 8 PWM slices, each with two channels (A and B).
 --------------------------------------------------------|
 ---
 
-### `PWMSEL slice`
-Select the active PWM slice for subsequent `PWMWRP` and `PWMLVL` commands.
+### `PWMSEL pin`
+
 
 | Argument | Range | Description      |
 |----------|-------|------------------|
-| `slice`  | 0–7   | PWM slice number |
+| `pin`  | 0–31   | PWM pin number |
 
 ```basic
-PWMSEL 0             : REM configure slice 0 (GP0/GP1)
+PWMSEL 0             : REM configure GP0
 ```
 
 ---
 
-### `PWMWRP wrap`
-Set the counter wrap (top) value for the selected slice. This controls the
-PWM period and resolution.
+### `PWMWFRQ pin,freq`
+Set the frequency
 
 | Argument | Range    | Description       |
 |----------|----------|-------------------|
-| `wrap`   | 1–65535  | Counter top value |
+| `freq`   | 1–65535  | Counter top value |
 
 ```basic
-PWMWRP 255           : REM 8-bit resolution (period = 256 counts)
-PWMWRP 46874         : REM ~20 ms period at 150 MHz / div 64 (50 Hz servo)
+PWMFRQ 5000          : Sets 5khz output
 ```
 
 ---
 
-### `PWMLVL chan, level`
+### `PWMLVL pin, level`
 Set the duty-cycle level for channel A (`0`) or B (`1`) of the selected
-slice. `level` ranges from `0` (always off) to `wrap` (always on).
+pin. `level` ranges from `0` (always off) to `wrap` (always on).
 
 | Argument | Range   | Description                      |
 |----------|---------|----------------------------------|
-| `chan`   | 0–1     | `0` = channel A, `1` = channel B |
+| `pin`    | 0–31    | pin number    |
 | `level`  | 0–65535 | Duty cycle (0 = 0%, wrap = 100%) |
 
 ```basic
-PWMLVL 0, 127        : REM 50% duty on channel A (wrap=255)
-PWMLVL 1, 200        : REM ~78% duty on channel B (wrap=255)
+PWMLVL 0, 127        : pin0 duty 127 (the resolution depends on the frequency)
 ```
 
 ---
 
-### `PWMON slice`
-Enable a PWM slice (start generating the waveform).
+### `PWMON pin`
+Enable a PWM pin (start generating the waveform).
 
 | Argument | Range | Description |
 |----------|-------|-------------|
-| `slice`  | 0–7   | PWM slice to enable |
+| `pin`  | 0–7   | PWM pin to enable |
 
 ```basic
-PWMON 0              : REM start PWM on slice 0
+PWMON 0              : REM start PWM on gp0
 ```
 
 ---
 
-### `PWMOFF slice`
-Disable a PWM slice (stop the waveform, output goes LOW).
+### `PWMOFF pin`
+Disable a PWM pin (stop the waveform, output goes LOW).
 
 | Argument | Range | Description |
 |----------|-------|-------------|
-| `slice`  | 0–7   | PWM slice to disable |
+| `pin`  | 0–7   | PWM pin to disable |
 
 ```basic
-PWMOFF 0             : REM stop PWM on slice 0
-```
-
-#### Full PWM example — 50% duty cycle on GP0
-
-```basic
-10 PWMSEL 0
-20 PWMWRP 255
-30 PWMLVL 0, 127
-40 PWMON 0
-```
-
-#### Full PWM example — servo on GP2 (slice 1, channel A)
-
-```basic
-10 REM 50 Hz: 150 MHz sys_clk, divider 64 -> 2343750 ticks/s
-20 REM WRAP = 46874 -> 46874/2343750 ~= 20 ms period
-30 REM Centre pulse 1.5 ms: 46874 * 1.5 / 20 ~= 3515
-40 PWMSEL 1
-50 PWMWRP 46874
-60 PWMLVL 0, 3515
-70 PWMON 1
+PWMOFF 0             : REM stop PWM on pin 0
 ```
 
 ---
@@ -270,40 +246,9 @@ the same 16-bit addresses used by PEEK/POKE (zero-extended to 32-bit).
 
 ---
 
-### `DMASIZE n`
-Set the transfer unit width for subsequent `DMACPY` calls.
-
-| Argument | Value | Transfer unit |
-|----------|-------|---------------|
-| `n`      | `0`   | 1 byte (default) |
-| `n`      | `1`   | 2 bytes (halfword) |
-| `n`      | `2`   | 4 bytes (word) |
-
-```basic
-DMASIZE 0            : REM byte transfers (default)
-```
-
-### `DMAINCR i,j`
-Set the transfer unit width for subsequent `DMACPY` calls.
-
-| Argument | Value | Transfer unit |
-|----------|-------|---------------|
-| `i`      | `0 or 1`| increment the read address or not |
-| 'j`      | `0 or 1`| increment the write address or not |
-
-```basic
-DMAINCR 0,1    : REM  FILLS the target with the data on the source
-DMAINCR 1,1    : REM  COPY the source data to the target
-DMAINCR 1,0    : REM  STREAM copy the source data to one single memory location
-```
-
----
-
 ### `DMACPY src, dst, cnt`
 Copy `cnt` units from address `src` to address `dst`. Both addresses
-auto-increment. The transfer width is set by `DMASIZE`. Read and write
-increment flags are forced to 1 (incrementing) — use `DMAINCR` for
-non-standard increment modes.
+auto-increment.
 
 | Argument | Range    | Description |
 |----------|----------|-------------|
@@ -318,9 +263,6 @@ DMACPY $0400, $0800, 1000  : REM copy 1000 bytes from screen to $0800
 #### Full DMA example — clear screen faster than MEMFILL
 
 ```basic
-10 POKE $FB, 32      : REM store a space character at $FB
-20 DMASIZE 0
-30 DMAINCR 0,1
 40 DMACPY $FB, $0400, 1000  : REM NOTE: read-inc is always on, so use MEMFILL for fills
 ```
 
@@ -330,45 +272,20 @@ DMACPY $0400, $0800, 1000  : REM copy 1000 bytes from screen to $0800
 
 ---
 
-### `DMAINCR rinc, winc`
+### `DMAFILL src, dst, cnt`
 Explicitly set the read (source) and write (destination) address increment
 flags. Use this when you need the DMA to read from or write to a fixed
 address instead of the default auto-incrementing mode.
 
-| Argument | Range | Description |
-|----------|-------|-------------|
-| `rinc`   | 0–1   | `0` = source address fixed, `1` = increment after each transfer |
-| `winc`   | 0–1   | `0` = dest address fixed, `1` = increment after each transfer |
+| Argument | Range    | Description |
+|----------|----------|-------------|
+| `src`    | 0–65535  | Source address |
+| `dst`    | 0–65535  | Destination address |
+| `cnt`    | 1–65535  | Number of units to transfer |
 
 ```basic
-DMAINCR 0, 1         : REM fill mode — read same byte, walk destination
-DMAINCR 1, 1         : REM copy mode — walk both (same as DMACPY default)
-DMAINCR 1, 0         : REM stream to port — walk source, fixed destination
+10 POKE $FB, 32 
+40 DMAFILL $FB, $0400, 1000
 ```
 
-> **Tip:** `DMACPY` always forces `DMAINCR 1,1`. Set `DMAINCR` after a
-> `DMASIZE` call but before writing `DMA_CTRL` via POKE when doing a manual
-> DMA setup.
-
 ---
-
-## Token Reference
-
-| Token | Type     | Keyword   |
-|-------|----------|-----------|
-| `$DF` | command  | `PINMODE` |
-| `$E0` | command  | `PINOUT`  |
-| `$E1` | command  | `PINPULL` |
-| `$E2` | command  | `PWMSEL`  |
-| `$E3` | command  | `PWMLVL`  |
-| `$E4` | command  | `PWMWRP`  |
-| `$E5` | command  | `PWMON`   |
-| `$E6` | command  | `PWMOFF`  |
-| `$E7` | command  | `I2CADR`  |
-| `$E8` | command  | `I2CWRT`  |
-| `$E9` | command  | `I2CRDT`  |
-| `$EA` | command  | `I2CSPD`  |
-| `$EB` | command  | `DMACPY`  |
-| `$EC` | command  | `DMASIZE` |
-| `$ED` | command  | `DMAINCR` |
-| `$EE` | function | `PINGET`  |

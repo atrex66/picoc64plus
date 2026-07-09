@@ -23,8 +23,8 @@ tools/*.bas
 tools/*.h
 
 # Host terminal build artifacts
-host_side/
-host_side/
+host_side/*
+host_side
 
 # KickAssembler build artifacts
 CustomBasicCommands/*.prg

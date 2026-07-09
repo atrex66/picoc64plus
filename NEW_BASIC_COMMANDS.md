@@ -2,7 +2,7 @@
 
 ## GPIO — General Purpose I/O
 
-Physical pins GP0–GP29. The onboard LED is GP25.
+Physical pins GP0–GP31. The onboard LED is GP25.
 
 ---
 
@@ -11,7 +11,7 @@ Set a GPIO pin's direction.
 
 | Argument | Range | Description |
 |----------|-------|-------------|
-| `pin`    | 0–29  | GPIO pin number |
+| `pin`    | 0–31  | GPIO pin number |
 | `dir`    | 0–1   | `0` = input, `1` = output |
 
 ```basic
@@ -26,7 +26,7 @@ Drive a GPIO output pin high or low.
 
 | Argument | Range | Description |
 |----------|-------|-------------|
-| `pin`    | 0–29  | GPIO pin number (must be set as output first) |
+| `pin`    | 0–31  | GPIO pin number (must be set as output first) |
 | `val`    | 0–1   | `0` = LOW, `1` = HIGH |
 
 ```basic
@@ -41,7 +41,7 @@ Enable or disable the internal pull-up resistor on a GPIO pin.
 
 | Argument | Range | Description |
 |----------|-------|-------------|
-| `pin`    | 0–29  | GPIO pin number |
+| `pin`    | 0–31  | GPIO pin number |
 | `val`    | 0–1   | `0` = pull-up off, `1` = pull-up on |
 
 ```basic
@@ -85,7 +85,7 @@ The RP2350 has 8 PWM pins, each with two channels (A and B).
 --------------------------------------------------------|
 ---
 
-### `PWMSEL pin`
+### `PWMINIT pin`
 
 
 | Argument | Range | Description      |
@@ -131,7 +131,7 @@ Enable a PWM pin (start generating the waveform).
 
 | Argument | Range | Description |
 |----------|-------|-------------|
-| `pin`  | 0–7   | PWM pin to enable |
+| `pin`  | 0–31   | PWM pin to enable |
 
 ```basic
 PWMON 0              : REM start PWM on gp0
@@ -144,7 +144,7 @@ Disable a PWM pin (stop the waveform, output goes LOW).
 
 | Argument | Range | Description |
 |----------|-------|-------------|
-| `pin`  | 0–7   | PWM pin to disable |
+| `pin`  | 0–31   | PWM pin to disable |
 
 ```basic
 PWMOFF 0             : REM stop PWM on pin 0

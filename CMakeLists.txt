@@ -39,6 +39,7 @@ add_executable(c64_plus
         src/c64basic_emu.c
         src/syscalls.c
         src/modules/pwm.c
+        src/modules/floatpoint.c
         #libs/pico-lfs/src/pico_lfs.c
         )
 

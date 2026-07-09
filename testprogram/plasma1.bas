@@ -10,9 +10,9 @@
 10 for i=0 to 1000
 20 poke 1024+i,208
 30 next
-40 for y=1 to 25
-50 for x=1 to 40
-60 a=sin(y/5)*cos(x/5)+log(x+y)
-70 poke 55296+(x-1)+(y-1)*40,abs(a*8)+24
-80 next x
-90 next y
+40 FOR y=1 TO 25
+50 FOR x=1 TO 40
+60 A=SIN(y/5)*COS(x/5)+LOG(x+y)
+70 POKE 55296+(X-1)+(Y-1)*40,abs(A*8)+24
+80 POKE X
+90 POKE Y

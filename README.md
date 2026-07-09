@@ -2,7 +2,10 @@
 
 Program the Pico peripherals like in the 80's
 
-The emulator do not try to emulate the real hardware there is no VIC2 or CIA chips emulation.
+The emulator do not try to emulate the real hardware there is no other chips emulation.
+in theory you can modify the code to run with different rom files eg. simulate other machines
+or you can run the emulator on different microcontrollers if you implement the syscalls for
+the different microcontroller, and the keyboard input for the terminal.
 
 **The Basic extension autostart now (8k cartridge on $8000)**
 
@@ -19,7 +22,8 @@ there.
 ## Features
 
 - Full MOS 6502 CPU emulation (all standard opcodes)
-- KERNAL & BASIC ROM emulation from embedded binary
+- **SysCall** new opcode, you can call native ARM code from 6502 assembly ($#19)
+- KERNAL & BASIC ROM emulation from embedded header file
 - **Custom BASIC tokens** — new commands and functions for GPIO, PWM, I2C and DMA
 - Memory-mapped hardware registers — same hardware also accessible via `PEEK`/`POKE`
 - **Host terminal — Recommended to use PUTTY for maximum compatibility (full color mode) **

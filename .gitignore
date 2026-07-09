@@ -13,6 +13,8 @@ testprogram/build/
 build.sh
 run.sh
 
+examples/basictetris.bas
+
 src/*.py
 tools/sprite_data.h.bas
 tools/sprite_data.h

@@ -21,6 +21,7 @@
 #include "keymap.h"
 #include "syscalls.h"
 #include "pwm.h"
+#include "ringbuffer.h"
 
 CPUState state = {0};
 
@@ -139,8 +140,10 @@ int main()
     clear_terminal();
     init_big_characters('a', ' ', 31);
     set_framerate(50); // Set the desired framerate to 50 FPS    
+    char life=0;
     set_palette(palette256, sizeof(palette256) / sizeof(palette256[0]));
     int previous_fifo_index = -1;  // Initialize previous FIFO index for change detection
+    ringbuffer_init();  // Initialize the ring buffer for keyboard input
     while (true) 
     {
         if (state.halt_flag && state.halt_reason != 0) {
@@ -166,14 +169,9 @@ int main()
             }
         }
 
-        tud_task(); // TinyUSB device task
-        char buf[8];
-        if (tud_cdc_available()) {
-            uint8_t count = tud_cdc_read(buf, sizeof(buf));
-            for (uint8_t i = 0; i < count; i++)
-            {
-                put_char(buf[i]);
-            }
+        while (tud_cdc_available() && ringbuffer_available() > 1) {  // Check if there's data available in the USB CDC buffer and space in the ring buffer
+            char c = tud_cdc_read_char();
+            ringbuffer_push((uint8_t)c);  // Push the character into the ring buffer
         }
 
         frame_start();
@@ -213,10 +211,10 @@ int main()
         send_screen_packet(blink);
     #else
         state.frame_ready_flag = true;  // set the frame ready flag in the CPU state
-        memory[0xd013] = 1;  // set the frame ready flag in memory
+        memory[FRAME_READY_ADDRESS] = 1;  // set the frame ready flag in memory
         render_frame();
         printf("\n\033[0m");
-        printf("OP/MS:%d\033[K\nPress SHIFT+INS to paste program\033[K", state.mops, memory[C64_KEY_COUNT]);
+        printf("OP/MS:%d\033[K\nPress SHIFT+INS to paste program\033[K\n", state.mops, memory[C64_KEY_COUNT]);
     #endif
         frame_end();
         if (time_us_64() - timer > 500000) {  // Toggle blink every 500 ms
@@ -258,29 +256,25 @@ void core1_entry() {
 
         if (gpio_get(23) == 0) 
         {
-            //reset_cpu(&state);
             reset_cpu(&state);
+            // memcpy(&memory[0x0801], PLASMA_PRG_DATA, sizeof(PLASMA_PRG_DATA));
+
         }
 
         if ((counter++ & 0xFF) == 0xFF) {  // update raster line every 4 ms (250 Hz)
             memory[0xD012]++;
         }
 
+        if (memory[C64_KEY_COUNT] < 2) {  // Check if there's space in the keyboard buffer
+            char key;
+            if (ringbuffer_pop((uint8_t*)&key)) {  // Pop a character from the ring buffer
+                put_char(key);
+            }
+        }
+
         if (!state.halt_flag) {
             execute_opcode(&state, read_memory(&state, state.program_counter));
         }
-
-        if (memory[TIMER_ZERO_ADDRESS] != 0) {
-            time_offset = time_us_32();
-            memory[TIMER_ZERO_ADDRESS] = 0;  // clear the zeroing request
-        }
-
-        uint32_t current_time = time_us_32();
-        uint32_t us_timer = current_time + time_offset;
-        memory[US_TIMER_ADDRESS]     = us_timer & 0xFF;
-        memory[US_TIMER_ADDRESS + 1] = (us_timer >> 8) & 0xFF;
-        memory[US_TIMER_ADDRESS + 2] = (us_timer >> 16) & 0xFF;
-        memory[US_TIMER_ADDRESS + 3] = (us_timer >> 24) & 0xFF;
 
         if (last_tick_us + 1000 <= time_us_32()) {
             state.mops = counter - last_counter;

@@ -659,13 +659,13 @@ static inline int read_input(input_queue_t *q)
     return q->bytes > 0 ? q->bytes : -1;
 }
 
-
 void frame_end() {
     if (fps_lock) {
         uint32_t target_time = current_time + target_frame_ns; // Target time for 60 FPS
         // wait_until(target_time);
-        while (time_us_32() < target_time) {
-            // Busy wait
+        while(target_time>time_us_32())
+        {
+
         }
     }
 }

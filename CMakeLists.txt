@@ -40,6 +40,7 @@ add_executable(c64_plus
         src/syscalls.c
         src/modules/pwm.c
         src/modules/floatpoint.c
+        src/modules/ringbuffer.c
         #libs/pico-lfs/src/pico_lfs.c
         )
 

@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (
     QScrollArea, QCheckBox, QDialog, QDialogButtonBox,
     QRubberBand
 )
-from PyQt6.QtCore import Qt, QRect, QPoint
+from PyQt6.QtCore import Qt, QRect, QRectF, QPoint
 from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QFont, QPixmap, QImage
 
 # -------------------- 256-color palette --------------------
@@ -238,21 +238,21 @@ class PreviewWidget(QWidget):
                 top_idx = grid[r][c][0]
                 bot_idx = grid[r][c][1]
 
-                painter.fillRect(QRect(int(x), int(y), int(cell_w), int(cell_h)), bg_color)
+                painter.fillRect(QRectF(x, y, cell_w, cell_h), bg_color)
 
                 if top_idx != trans:
                     painter.fillRect(
-                        QRect(int(x), int(y), int(cell_w), int(cell_h // 2)),
+                        QRectF(x, y, cell_w, cell_h // 2),
                         PALETTE[top_idx]
                     )
                 if bot_idx != trans:
                     painter.fillRect(
-                        QRect(int(x), int(y + cell_h // 2), int(cell_w), int(cell_h - cell_h // 2)),
+                        QRectF(x, y + cell_h // 2, cell_w, cell_h - cell_h // 2),
                         PALETTE[bot_idx]
                     )
 
                 #painter.setPen(QPen(QColor(80, 80, 80), 1))
-                #painter.drawRect(QRect(int(x), int(y), int(cell_w), int(cell_h)))
+                #painter.drawRect(QRectF(int(x), int(y), int(cell_w), int(cell_h)))
 
         #grid lines for odd height sprites
         #if h % 2 == 1:
@@ -301,7 +301,7 @@ class CanvasWidget(QWidget):
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        #painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         cell_w = self.width() / self.width_px
         cell_h = self.height() / self.rows
@@ -313,50 +313,50 @@ class CanvasWidget(QWidget):
                 y = r * cell_h
                 top_idx, bot_idx = self.grid[r][c]
 
-                painter.fillRect(QRect(int(x), int(y), int(cell_w), int(cell_h)), QColor(60, 60, 60))
+                #painter.fillRect(QRectF(x, y, cell_w, cell_h), QColor(60, 60, 60))
 
                 if top_idx != trans:
                     painter.fillRect(
-                        QRect(int(x), int(y), int(cell_w), int(cell_h // 2)),
+                        QRectF(x, y, cell_w, cell_h // 2),
                         PALETTE[top_idx]
                     )
                 else:
                     brush = QBrush(QColor(80, 80, 80))
                     painter.fillRect(
-                        QRect(int(x), int(y), int(cell_w), int(cell_h // 2)),
+                        QRectF(x, y, cell_w, cell_h // 2),
                         brush
                     )
-                    painter.setPen(QPen(QColor(40, 40, 40), 1))
-                    painter.drawLine(int(x), int(y), int(x + cell_w), int(y + cell_h // 2))
-                    painter.drawLine(int(x + cell_w), int(y), int(x), int(y + cell_h // 2))
+                    #painter.setPen(QPen(QColor(40, 40, 40), 1))
+                    #painter.drawLine(int(x), int(y), int(x + cell_w), int(y + cell_h // 2))
+                    #painter.drawLine(int(x + cell_w), int(y), int(x), int(y + cell_h // 2))
 
                 if bot_idx != trans:
                     painter.fillRect(
-                        QRect(int(x), int(y + cell_h // 2), int(cell_w), int(cell_h - cell_h // 2)),
+                        QRectF(x, y + cell_h // 2, cell_w, cell_h - cell_h // 2),
                         PALETTE[bot_idx]
                     )
                 else:
                     brush = QBrush(QColor(80, 80, 80))
                     painter.fillRect(
-                        QRect(int(x), int(y + cell_h // 2), int(cell_w), int(cell_h - cell_h // 2)),
+                        QRectF(x, y + cell_h // 2, cell_w, cell_h - cell_h // 2),
                         brush
                     )
-                    painter.setPen(QPen(QColor(40, 40, 40), 1))
-                    mid_y = int(y + cell_h // 2)
-                    painter.drawLine(int(x), mid_y, int(x + cell_w), int(y + cell_h))
-                    painter.drawLine(int(x + cell_w), mid_y, int(x), int(y + cell_h))
+                    #painter.setPen(QPen(QColor(40, 40, 40), 1))
+                    #mid_y = int(y + cell_h // 2)
+                    #painter.drawLine(int(x), mid_y, int(x + cell_w), int(y + cell_h))
+                    #painter.drawLine(int(x + cell_w), mid_y, int(x), int(y + cell_h))
 
-                painter.setPen(QPen(QColor(120, 120, 120), 1))
-                painter.drawRect(QRect(int(x), int(y), int(cell_w), int(cell_h)))
+                #painter.setPen(QPen(QColor(120, 120, 120), 1))
+                #painter.drawRect(QRectF(x, y, cell_w, cell_h))
 
-        if self.height_px % 2 == 1:
-            r = self.rows - 1
-            for c in range(self.width_px):
-                x = c * cell_w
-                y = r * cell_h
-                painter.setPen(QPen(QColor(200, 50, 50), 2))
-                painter.drawLine(int(x), int(y + cell_h // 2), int(x + cell_w), int(y + cell_h))
-                painter.drawLine(int(x + cell_w), int(y + cell_h // 2), int(x), int(y + cell_h))
+        #if self.height_px % 2 == 1:
+        #    r = self.rows - 1
+        #    for c in range(self.width_px):
+        #        x = c * cell_w
+        #        y = r * cell_h
+        #        painter.setPen(QPen(QColor(200, 50, 50), 2))
+        #        painter.drawLine(int(x), int(y + cell_h // 2), int(x + cell_w), int(y + cell_h))
+        #        painter.drawLine(int(x + cell_w), int(y + cell_h // 2), int(x), int(y + cell_h))
 
     def mousePressEvent(self, event):
         row, col, is_top = self.get_cell_and_half(event.position())

@@ -16,7 +16,7 @@ static const terminal_key_t terminal_keys[] = {
     { "\x1b[F",  0x03 },  // end
 
     { "\x1b[2~", 0x94 }, // insert
-    // { "\x1b[3~", 0x14 }, // delete
+    { "\x1b[3~", 0x14 }, // delete
     { "\x1b[5~", 0x18 }, // page up (RVS ON)
     { "\x1b[6~", 0x92 }, // page down (RVS OFF)
 

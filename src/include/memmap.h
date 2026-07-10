@@ -1,7 +1,7 @@
 #ifndef MEMMAP_H
 #define MEMMAP_H
 
-#define turbo_mode 0
+#define turbo_mode 1
 #define use_host 0
 
 // ── Overclocking settings ────────────────────────────────────────────────────
@@ -9,7 +9,7 @@
 // RP2350 default: 150 MHz @ VREG_VOLTAGE_1_10
 // Tested stable:  300 MHz @ VREG_VOLTAGE_1_20  (flash speed irrelevant: copy_to_ram)
 #if turbo_mode
-    #define CPU_CLOCK_KHZ   300000              // target system clock in kHz
+    #define CPU_CLOCK_KHZ   375000              // target system clock in kHz
     #define CPU_CORE_VOLTAGE VREG_VOLTAGE_1_30  // core voltage (see hardware/vreg.h)
 #else
     #define CPU_CLOCK_KHZ   150000              // target system clock in kHz

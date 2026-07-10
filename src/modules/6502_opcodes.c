@@ -16,6 +16,7 @@
 #include "enums.h"
 #include "structs.h"
 #include "syscalls.h"
+#include "rom_hooks.h"
 
 uint8_t memory[MEMORY_SIZE];
 
@@ -28,6 +29,10 @@ uint8_t memory[MEMORY_SIZE];
 #define charrom_start_address   0xD000 
 #define cart_low_start_address  0x8000 
 #define cart_high_start_address 0xE000 
+
+KernalHook_t hooked_address[32] = {
+    {0xEA87, keymatrix_scan},  // Example: Hook for the keyboard scan routine at address 0xEA87
+};
 
 uint8_t read_memory(CPUState *state, uint16_t address) {
 
@@ -46,10 +51,8 @@ uint8_t read_memory(CPUState *state, uint16_t address) {
     return memory[address];
 }
 
-void write_memory(CPUState *state, uint16_t address, uint8_t value) {
-    
+static inline void write_memory(CPUState *state, uint16_t address, uint8_t value) {
     memory[address] = value;
-
 }
 
 void reset_cpu(CPUState *state) {
@@ -86,7 +89,7 @@ void reset_cpu(CPUState *state) {
     #endif
 }
 
-void push_stack(CPUState *state, uint8_t value) {
+static inline void push_stack(CPUState *state, uint8_t value) {
     write_memory(state, STACK_BASE + state->stack_pointer, value);
     state->stack_pointer--;
 }
@@ -96,7 +99,7 @@ __attribute__((always_inline)) inline uint8_t pop_stack(CPUState *state) {
     return read_memory(state, STACK_BASE + state->stack_pointer);
 }
 
-void push_stack_16(CPUState *state, uint16_t value) {
+static inline void push_stack_16(CPUState *state, uint16_t value) {
     push_stack(state, (value >> 8) & 0xFF); 
     push_stack(state, value & 0xFF);        
 }
@@ -107,7 +110,7 @@ __attribute__((always_inline)) inline uint16_t pop_stack_16(CPUState *state) {
     return (high_byte << 8) | low_byte;
 }
 
-void SYSCALL(CPUState *state) {
+static inline void SYSCALL(CPUState *state) {
     uint8_t opcode = read_memory(state, state->program_counter+1);
     if (arm_opcode_functions[opcode]) {
         arm_opcode_functions[opcode](state);
@@ -119,7 +122,7 @@ void SYSCALL(CPUState *state) {
     state->program_counter = state->program_counter + 2;
 }
 
-void BCD_ADD(CPUState *state, uint8_t value) {
+static inline void BCD_ADD(CPUState *state, uint8_t value) {
     uint16_t binary_sum = state->accumulator + value + (state->carry_flag ? 1 : 0);
     state->zero_flag = ((binary_sum & 0xFF) == 0);
     state->negative_flag = ((binary_sum & 0x80) != 0);
@@ -139,7 +142,7 @@ void BCD_ADD(CPUState *state, uint8_t value) {
     state->accumulator = ((high_nibble << 4) & 0xF0) | (low_nibble & 0x0F);
 }
 
-void BCD_SUB(CPUState *state, uint8_t value) {
+static inline void BCD_SUB(CPUState *state, uint8_t value) {
     uint16_t binary_diff = state->accumulator - value - (state->carry_flag ? 0 : 1);
     state->zero_flag = ((binary_diff & 0xFF) == 0);
     state->negative_flag = ((binary_diff & 0x80) != 0);
@@ -161,7 +164,7 @@ void BCD_SUB(CPUState *state, uint8_t value) {
 }
 
 
-void ADC_IMMEDIATE(CPUState *state) {  // eg: ADC #$01
+static inline void ADC_IMMEDIATE(CPUState *state) {  // eg: ADC #$01
     uint8_t value = read_memory(state, state->program_counter + 1);
 
     if (state->decimal_mode) {
@@ -184,7 +187,7 @@ void ADC_IMMEDIATE(CPUState *state) {  // eg: ADC #$01
 }
 
 
-void ADC_ZEROPAGE(CPUState *state) {   // eg: ADC $00
+static inline void ADC_ZEROPAGE(CPUState *state) {   // eg: ADC $00
     uint8_t zp_address = read_memory(state, state->program_counter + 1);
     uint8_t value = read_memory(state, zp_address);
 
@@ -204,7 +207,7 @@ void ADC_ZEROPAGE(CPUState *state) {   // eg: ADC $00
     #endif
 }
 
-void ADC_ZEROPAGE_X(CPUState *state) {  // eg: ADC $00,X
+static inline void ADC_ZEROPAGE_X(CPUState *state) {  // eg: ADC $00,X
     uint8_t zp_address = (read_memory(state, state->program_counter + 1) + state->x_register) & 0xFF;
     uint8_t value = read_memory(state, zp_address);
 
@@ -224,7 +227,7 @@ void ADC_ZEROPAGE_X(CPUState *state) {  // eg: ADC $00,X
     #endif
 }
 
-void ADC_ABSOLUTE(CPUState *state) {    // eg: ADC $0000
+static inline void ADC_ABSOLUTE(CPUState *state) {    // eg: ADC $0000
     uint16_t abs_address = read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8);
     uint8_t value = read_memory(state, abs_address);
 
@@ -244,7 +247,7 @@ void ADC_ABSOLUTE(CPUState *state) {    // eg: ADC $0000
     #endif  
 }
 
-void ADC_ABSOLUTE_X(CPUState *state) {  // eg: ADC $0000,X
+static inline void ADC_ABSOLUTE_X(CPUState *state) {  // eg: ADC $0000,X
     uint16_t abs_address = (read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8)) + state->x_register;
     uint8_t value = read_memory(state, abs_address);
 
@@ -264,7 +267,7 @@ void ADC_ABSOLUTE_X(CPUState *state) {  // eg: ADC $0000,X
     #endif
 }
 
-void ADC_ABSOLUTE_Y(CPUState *state) {  // eg: ADC $0000,Y
+static inline void ADC_ABSOLUTE_Y(CPUState *state) {  // eg: ADC $0000,Y
     uint16_t abs_address = (read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8)) + state->y_register;
     uint8_t value = read_memory(state, abs_address);
 
@@ -284,7 +287,7 @@ void ADC_ABSOLUTE_Y(CPUState *state) {  // eg: ADC $0000,Y
     #endif
 }
 
-void ADC_INDIRECT_X(CPUState *state) {  // eg: ADC ($00,X)
+static inline void ADC_INDIRECT_X(CPUState *state) {  // eg: ADC ($00,X)
     uint8_t ZEROPAGE_address = (read_memory(state, state->program_counter + 1) + state->x_register) & 0xFF;
     uint16_t ind_address = read_memory(state, ZEROPAGE_address) | (read_memory(state, (ZEROPAGE_address + 1)) & 0xFF) << 8;
     uint8_t value = read_memory(state, ind_address);
@@ -305,7 +308,7 @@ void ADC_INDIRECT_X(CPUState *state) {  // eg: ADC ($00,X)
     #endif
 }
 
-void ADC_INDIRECT_Y(CPUState *state) {  // eg: ADC ($00),Y
+static inline void ADC_INDIRECT_Y(CPUState *state) {  // eg: ADC ($00),Y
     uint8_t ZEROPAGE_address = read_memory(state, state->program_counter + 1);
     uint16_t ind_address = (read_memory(state, ZEROPAGE_address) | (read_memory(state, (ZEROPAGE_address + 1)) & 0xFF) << 8) + state->y_register;
     uint8_t value = read_memory(state, ind_address);
@@ -326,7 +329,7 @@ void ADC_INDIRECT_Y(CPUState *state) {  // eg: ADC ($00),Y
     #endif
 }
 
-void AND_IMMEDIATE(CPUState *state) {   // eg: AND #$01
+static inline void AND_IMMEDIATE(CPUState *state) {   // eg: AND #$01
     temp = read_memory(state, state->program_counter + 1);
     state->accumulator &= temp; 
     state->zero_flag = (state->accumulator == 0);
@@ -336,7 +339,7 @@ void AND_IMMEDIATE(CPUState *state) {   // eg: AND #$01
     #endif
 }
 
-void AND_ZEROPAGE(CPUState *state) {   // eg: AND $00
+static inline void AND_ZEROPAGE(CPUState *state) {   // eg: AND $00
     temp_address = read_memory(state, state->program_counter + 1);
     temp = read_memory(state, temp_address);
     state->accumulator &= temp;
@@ -347,7 +350,7 @@ void AND_ZEROPAGE(CPUState *state) {   // eg: AND $00
     #endif
 }
 
-void AND_ZEROPAGE_X(CPUState *state) {  // eg: AND $00,X
+static inline void AND_ZEROPAGE_X(CPUState *state) {  // eg: AND $00,X
     temp_address = (read_memory(state, state->program_counter + 1) + state->x_register) & 0xFF;
     temp = read_memory(state, temp_address);
     state->accumulator &= temp;
@@ -358,7 +361,7 @@ void AND_ZEROPAGE_X(CPUState *state) {  // eg: AND $00,X
     #endif
 }
 
-void AND_ABSOLUTE(CPUState *state) {    // eg: AND $0000
+static inline void AND_ABSOLUTE(CPUState *state) {    // eg: AND $0000
     temp_address = read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8);
     temp = read_memory(state, temp_address);
     state->accumulator &= temp;
@@ -369,7 +372,7 @@ void AND_ABSOLUTE(CPUState *state) {    // eg: AND $0000
     #endif
 }
 
-void AND_ABSOLUTE_X(CPUState *state) {  // eg: AND $0000,X
+static inline void AND_ABSOLUTE_X(CPUState *state) {  // eg: AND $0000,X
     temp_address = (read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8)) + state->x_register;
     temp = read_memory(state, temp_address);
     state->accumulator &= temp;
@@ -380,7 +383,7 @@ void AND_ABSOLUTE_X(CPUState *state) {  // eg: AND $0000,X
     #endif
 }
 
-void AND_ABSOLUTE_Y(CPUState *state) {  // eg: AND $0000,Y
+static inline void AND_ABSOLUTE_Y(CPUState *state) {  // eg: AND $0000,Y
     temp_address = (read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8)) + state->y_register; 
     temp = read_memory(state, temp_address); 
     state->accumulator &= temp; 
@@ -391,7 +394,7 @@ void AND_ABSOLUTE_Y(CPUState *state) {  // eg: AND $0000,Y
     #endif
 }
 
-void AND_INDIRECT_X(CPUState *state) {  // eg: AND ($00,X)
+static inline void AND_INDIRECT_X(CPUState *state) {  // eg: AND ($00,X)
     uint8_t ZEROPAGE_address = (read_memory(state, state->program_counter + 1) + state->x_register) & 0xFF; 
     temp_address = read_memory(state, ZEROPAGE_address) | (read_memory(state, (ZEROPAGE_address + 1)) & 0xFF) << 8; 
     temp = read_memory(state, temp_address); 
@@ -403,7 +406,7 @@ void AND_INDIRECT_X(CPUState *state) {  // eg: AND ($00,X)
     #endif
 }
 
-void AND_INDIRECT_Y(CPUState *state) {  // eg: AND ($00),Y
+static inline void AND_INDIRECT_Y(CPUState *state) {  // eg: AND ($00),Y
     uint8_t ZEROPAGE_address = read_memory(state, state->program_counter + 1); 
     temp_address = (read_memory(state, ZEROPAGE_address) | (read_memory(state, (ZEROPAGE_address + 1)) & 0xFF) << 8) + state->y_register; 
     temp = read_memory(state, temp_address); 
@@ -415,7 +418,7 @@ void AND_INDIRECT_Y(CPUState *state) {  // eg: AND ($00),Y
     #endif
 }
 
-void ASL_IMMEDIATE(CPUState *state) {  // $0A = ASL Accumulator (1-byte)
+static inline void ASL_IMMEDIATE(CPUState *state) {  // $0A = ASL Accumulator (1-byte)
     state->carry_flag = (state->accumulator & 0x80) != 0;
     state->accumulator <<= 1;
     state->zero_flag = (state->accumulator == 0);
@@ -426,7 +429,7 @@ void ASL_IMMEDIATE(CPUState *state) {  // $0A = ASL Accumulator (1-byte)
     #endif
 }
 
-void ASL_ZEROPAGE(CPUState *state) {  // eg: ASL $00
+static inline void ASL_ZEROPAGE(CPUState *state) {  // eg: ASL $00
     temp_address = read_memory(state, state->program_counter + 1); 
     temp = read_memory(state, temp_address); 
     state->carry_flag = (temp & 0x80) != 0; 
@@ -439,7 +442,7 @@ void ASL_ZEROPAGE(CPUState *state) {  // eg: ASL $00
     #endif
 }
 
-void ASL_ZEROPAGE_X(CPUState *state) {  // eg: ASL $00,X
+static inline void ASL_ZEROPAGE_X(CPUState *state) {  // eg: ASL $00,X
     temp_address = (read_memory(state, state->program_counter + 1) + state->x_register) & 0xFF; 
     temp = read_memory(state, temp_address); 
     state->carry_flag = (temp & 0x80) != 0; 
@@ -452,7 +455,7 @@ void ASL_ZEROPAGE_X(CPUState *state) {  // eg: ASL $00,X
     #endif
 }
 
-void ASL_ABSOLUTE(CPUState *state) {  // eg: ASL $0000
+static inline void ASL_ABSOLUTE(CPUState *state) {  // eg: ASL $0000
     temp_address = read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8); 
     temp = read_memory(state, temp_address); 
     state->carry_flag = (temp & 0x80) != 0; 
@@ -465,7 +468,7 @@ void ASL_ABSOLUTE(CPUState *state) {  // eg: ASL $0000
     #endif
 }
 
-void ASL_ABSOLUTE_X(CPUState *state) {  // eg: ASL $0000,X
+static inline void ASL_ABSOLUTE_X(CPUState *state) {  // eg: ASL $0000,X
     temp_address = (read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8)) + state->x_register; 
     temp = read_memory(state, temp_address); 
     state->carry_flag = (temp & 0x80) != 0; 
@@ -478,7 +481,7 @@ void ASL_ABSOLUTE_X(CPUState *state) {  // eg: ASL $0000,X
     #endif
 }
 
-void ASL_ABSOLUTE_Y(CPUState *state) {  // eg: ASL $0000,Y
+static inline void ASL_ABSOLUTE_Y(CPUState *state) {  // eg: ASL $0000,Y
     temp_address = (read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8)) + state->y_register; 
     temp = read_memory(state, temp_address); 
     state->carry_flag = (temp & 0x80) != 0; 
@@ -491,7 +494,7 @@ void ASL_ABSOLUTE_Y(CPUState *state) {  // eg: ASL $0000,Y
     #endif
 }
 
-void ASL_INDIRECT_X(CPUState *state) {  // eg: ASL ($00,X)
+static inline void ASL_INDIRECT_X(CPUState *state) {  // eg: ASL ($00,X)
     uint8_t ZEROPAGE_address = (read_memory(state, state->program_counter + 1) + state->x_register) & 0xFF; 
     temp_address = read_memory(state, ZEROPAGE_address) | (read_memory(state, (ZEROPAGE_address + 1)) & 0xFF) << 8; 
     temp = read_memory(state, temp_address); 
@@ -505,7 +508,7 @@ void ASL_INDIRECT_X(CPUState *state) {  // eg: ASL ($00,X)
     #endif
 }
 
-void ASL_INDIRECT_Y(CPUState *state) {  // eg: ASL ($00),Y
+static inline void ASL_INDIRECT_Y(CPUState *state) {  // eg: ASL ($00),Y
     uint8_t ZEROPAGE_address = read_memory(state, state->program_counter + 1); 
     temp_address = (read_memory(state, ZEROPAGE_address) | (read_memory(state, (ZEROPAGE_address + 1)) & 0xFF) << 8) + state->y_register; 
     temp = read_memory(state, temp_address); 
@@ -519,7 +522,7 @@ void ASL_INDIRECT_Y(CPUState *state) {  // eg: ASL ($00),Y
     #endif
 }
 
-void BCC(CPUState *state) {  // eg: BCC $00
+static inline void BCC(CPUState *state) {  // eg: BCC $00
     int8_t offset;
     offset = (int8_t)read_memory(state, state->program_counter + 1); 
     if (!state->carry_flag) { 
@@ -532,7 +535,7 @@ void BCC(CPUState *state) {  // eg: BCC $00
     #endif
 }
 
-void BCS(CPUState *state) {  // eg: BCS $00
+static inline void BCS(CPUState *state) {  // eg: BCS $00
     int8_t offset;
     offset = (int8_t)read_memory(state, state->program_counter + 1); 
     if (state->carry_flag) { 
@@ -545,7 +548,7 @@ void BCS(CPUState *state) {  // eg: BCS $00
     #endif
 }
 
-void BEQ(CPUState *state) {  // eg: BEQ $00
+static inline void BEQ(CPUState *state) {  // eg: BEQ $00
     int8_t offset;
     offset = (int8_t)read_memory(state, state->program_counter + 1); 
     if (state->zero_flag) { 
@@ -558,7 +561,7 @@ void BEQ(CPUState *state) {  // eg: BEQ $00
     #endif
 }
 
-void BIT_ZEROPAGE(CPUState *state) {  // eg: BIT $00
+static inline void BIT_ZEROPAGE(CPUState *state) {  // eg: BIT $00
     temp_address = read_memory(state, state->program_counter + 1); 
     temp = read_memory(state, temp_address); 
     state->zero_flag = (state->accumulator & temp) == 0; 
@@ -570,7 +573,7 @@ void BIT_ZEROPAGE(CPUState *state) {  // eg: BIT $00
     #endif
 }
 
-void BIT_ABSOLUTE(CPUState *state) {  // eg: BIT $0000
+static inline void BIT_ABSOLUTE(CPUState *state) {  // eg: BIT $0000
     temp_address = read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8);
     temp = read_memory(state, temp_address);
     state->zero_flag = (state->accumulator & temp) == 0;
@@ -582,7 +585,7 @@ void BIT_ABSOLUTE(CPUState *state) {  // eg: BIT $0000
     #endif
 }
 
-void BMI(CPUState *state) {  // eg: BMI $00
+static inline void BMI(CPUState *state) {  // eg: BMI $00
     int8_t offset;
     offset = (int8_t)read_memory(state, state->program_counter + 1); 
     if (state->negative_flag) { 
@@ -595,7 +598,7 @@ void BMI(CPUState *state) {  // eg: BMI $00
     #endif
 }
 
-void BNE(CPUState *state) {  // eg: BNE $00
+static inline void BNE(CPUState *state) {  // eg: BNE $00
     int8_t offset;
     offset = (int8_t)read_memory(state, state->program_counter + 1); 
     if (!state->zero_flag) { 
@@ -608,7 +611,7 @@ void BNE(CPUState *state) {  // eg: BNE $00
     #endif
 }
 
-void BPL(CPUState *state) {  // eg: BPL $00
+static inline void BPL(CPUState *state) {  // eg: BPL $00
     int8_t offset;
     offset = (int8_t)read_memory(state, state->program_counter + 1); 
     if (!state->negative_flag) { 
@@ -621,7 +624,7 @@ void BPL(CPUState *state) {  // eg: BPL $00
     #endif
 }
 
-void BRK(CPUState *state) {  // eg: BRK
+static inline void BRK(CPUState *state) {  // eg: BRK
     state->break_command = true;
     state->program_counter += 2;  
     push_stack(state, (state->program_counter >> 8) & 0xFF);
@@ -642,7 +645,7 @@ void BRK(CPUState *state) {  // eg: BRK
     #endif
 }
 
-void BVC(CPUState *state) {  // eg: BVC $00
+static inline void BVC(CPUState *state) {  // eg: BVC $00
     int8_t offset;
     offset = (int8_t)read_memory(state, state->program_counter + 1); 
     if (!state->overflow_flag) { 
@@ -655,7 +658,7 @@ void BVC(CPUState *state) {  // eg: BVC $00
     #endif
 }
 
-void BVS(CPUState *state) {  // eg: BVS $00
+static inline void BVS(CPUState *state) {  // eg: BVS $00
     int8_t offset;
     offset = (int8_t)read_memory(state, state->program_counter + 1); 
     if (state->overflow_flag) { 
@@ -668,7 +671,7 @@ void BVS(CPUState *state) {  // eg: BVS $00
     #endif
 }
 
-void CLC(CPUState *state) {  // eg: CLC
+static inline void CLC(CPUState *state) {  // eg: CLC
     state->carry_flag = false; 
     state->program_counter += 1; 
     #if debug
@@ -676,7 +679,7 @@ void CLC(CPUState *state) {  // eg: CLC
     #endif
 }
 
-void CLD(CPUState *state) {  // eg: CLD
+static inline void CLD(CPUState *state) {  // eg: CLD
     state->decimal_mode = false; 
     state->program_counter += 1; 
     #if debug
@@ -684,7 +687,7 @@ void CLD(CPUState *state) {  // eg: CLD
     #endif
 }
 
-void CLI(CPUState *state) {  // eg: CLI
+static inline void CLI(CPUState *state) {  // eg: CLI
     state->interrupt_disable = false; 
     state->program_counter += 1; 
     #if debug
@@ -692,7 +695,7 @@ void CLI(CPUState *state) {  // eg: CLI
     #endif
 }
 
-void CLV(CPUState *state) {  // eg: CLV
+static inline void CLV(CPUState *state) {  // eg: CLV
     state->overflow_flag = false; 
     state->program_counter += 1; 
     #if debug
@@ -700,7 +703,7 @@ void CLV(CPUState *state) {  // eg: CLV
     #endif
 }
 
-void CMP_IMMEDIATE(CPUState *state) {  // eg: CMP #$01
+static inline void CMP_IMMEDIATE(CPUState *state) {  // eg: CMP #$01
     temp = read_memory(state, state->program_counter + 1); 
     uint16_t result = state->accumulator - temp; 
     state->carry_flag = (state->accumulator >= temp); 
@@ -712,7 +715,7 @@ void CMP_IMMEDIATE(CPUState *state) {  // eg: CMP #$01
     #endif
 }
 
-void CMP_ZEROPAGE(CPUState *state) {  // eg: CMP $00
+static inline void CMP_ZEROPAGE(CPUState *state) {  // eg: CMP $00
     temp_address = read_memory(state, state->program_counter + 1); 
     temp = read_memory(state, temp_address); 
     uint16_t result = state->accumulator - temp; 
@@ -725,7 +728,7 @@ void CMP_ZEROPAGE(CPUState *state) {  // eg: CMP $00
     #endif
 }
 
-void CMP_ZEROPAGE_X(CPUState *state) {  // eg: CMP $00,X
+static inline void CMP_ZEROPAGE_X(CPUState *state) {  // eg: CMP $00,X
     temp_address = (read_memory(state, state->program_counter + 1) + state->x_register) & 0xFF; 
     temp = read_memory(state, temp_address); 
     uint16_t result = state->accumulator - temp; 
@@ -738,7 +741,7 @@ void CMP_ZEROPAGE_X(CPUState *state) {  // eg: CMP $00,X
     #endif
 }
 
-void CMP_ABSOLUTE(CPUState *state) {  // eg: CMP $0000
+static inline void CMP_ABSOLUTE(CPUState *state) {  // eg: CMP $0000
     temp_address = read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8); 
     temp = read_memory(state, temp_address); 
     uint16_t result = state->accumulator - temp; 
@@ -751,7 +754,7 @@ void CMP_ABSOLUTE(CPUState *state) {  // eg: CMP $0000
     #endif
 }
 
-void CMP_ABSOLUTE_X(CPUState *state) {  // eg: CMP $0000,X
+static inline void CMP_ABSOLUTE_X(CPUState *state) {  // eg: CMP $0000,X
     temp_address = (read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8)) + state->x_register; 
     temp = read_memory(state, temp_address); 
     uint16_t result = state->accumulator - temp; 
@@ -764,7 +767,7 @@ void CMP_ABSOLUTE_X(CPUState *state) {  // eg: CMP $0000,X
     #endif
 }
 
-void CMP_ABSOLUTE_Y(CPUState *state) {  // eg: CMP $0000,Y
+static inline void CMP_ABSOLUTE_Y(CPUState *state) {  // eg: CMP $0000,Y
     temp_address = (read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8)) + state->y_register; 
     temp = read_memory(state, temp_address); 
     uint16_t result = state->accumulator - temp; 
@@ -777,7 +780,7 @@ void CMP_ABSOLUTE_Y(CPUState *state) {  // eg: CMP $0000,Y
     #endif
 }
 
-void CMP_INDIRECT_X(CPUState *state) {  // eg: CMP ($00,X)
+static inline void CMP_INDIRECT_X(CPUState *state) {  // eg: CMP ($00,X)
     uint8_t ZEROPAGE_address = (read_memory(state, state->program_counter + 1) + state->x_register) & 0xFF; 
     temp_address = read_memory(state, ZEROPAGE_address) | (read_memory(state, (ZEROPAGE_address + 1)) & 0xFF) << 8; 
     temp = read_memory(state, temp_address); 
@@ -791,7 +794,7 @@ void CMP_INDIRECT_X(CPUState *state) {  // eg: CMP ($00,X)
     #endif
 }
 
-void CMP_INDIRECT_Y(CPUState *state) {  // eg: CMP ($00),Y
+static inline void CMP_INDIRECT_Y(CPUState *state) {  // eg: CMP ($00),Y
     uint8_t ZEROPAGE_address = read_memory(state, state->program_counter + 1); 
     temp_address = (read_memory(state, ZEROPAGE_address) | (read_memory(state, (ZEROPAGE_address + 1)) & 0xFF) << 8) + state->y_register; 
     temp = read_memory(state, temp_address); 
@@ -805,7 +808,7 @@ void CMP_INDIRECT_Y(CPUState *state) {  // eg: CMP ($00),Y
     #endif
 }
 
-void CPX_IMMEDIATE(CPUState *state) {  // eg: CPX #$01
+static inline void CPX_IMMEDIATE(CPUState *state) {  // eg: CPX #$01
     temp = read_memory(state, state->program_counter + 1); 
     uint16_t result = state->x_register - temp; 
     state->carry_flag = (state->x_register >= temp); 
@@ -817,7 +820,7 @@ void CPX_IMMEDIATE(CPUState *state) {  // eg: CPX #$01
     #endif
 }
 
-void CPX_ZEROPAGE(CPUState *state) {  // eg: CPX $00
+static inline void CPX_ZEROPAGE(CPUState *state) {  // eg: CPX $00
     temp_address = read_memory(state, state->program_counter + 1); 
     temp = read_memory(state, temp_address); 
     uint16_t result = state->x_register - temp; 
@@ -830,7 +833,7 @@ void CPX_ZEROPAGE(CPUState *state) {  // eg: CPX $00
     #endif
 }
 
-void CPX_ABSOLUTE(CPUState *state) {  // eg: CPX $0000
+static inline void CPX_ABSOLUTE(CPUState *state) {  // eg: CPX $0000
     temp_address = read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8); 
     temp = read_memory(state, temp_address); 
     uint16_t result = state->x_register - temp; 
@@ -843,7 +846,7 @@ void CPX_ABSOLUTE(CPUState *state) {  // eg: CPX $0000
     #endif
 }
 
-void CPY_IMMEDIATE(CPUState *state) {  // eg: CPY #$01
+static inline void CPY_IMMEDIATE(CPUState *state) {  // eg: CPY #$01
     temp = read_memory(state, state->program_counter + 1); 
     uint16_t result = state->y_register - temp; 
     state->carry_flag = (state->y_register >= temp); 
@@ -855,7 +858,7 @@ void CPY_IMMEDIATE(CPUState *state) {  // eg: CPY #$01
     #endif
 }
 
-void CPY_ZEROPAGE(CPUState *state) {  // eg: CPY $00
+static inline void CPY_ZEROPAGE(CPUState *state) {  // eg: CPY $00
     temp_address = read_memory(state, state->program_counter + 1); 
     temp = read_memory(state, temp_address); 
     uint16_t result = state->y_register - temp; 
@@ -868,7 +871,7 @@ void CPY_ZEROPAGE(CPUState *state) {  // eg: CPY $00
     #endif
 }
 
-void CPY_ABSOLUTE(CPUState *state) {  // eg: CPY $0000
+static inline void CPY_ABSOLUTE(CPUState *state) {  // eg: CPY $0000
     temp_address = read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8); 
     temp = read_memory(state, temp_address); 
     uint16_t result = state->y_register - temp; 
@@ -881,7 +884,7 @@ void CPY_ABSOLUTE(CPUState *state) {  // eg: CPY $0000
     #endif
 }
 
-void DEC_ZEROPAGE(CPUState *state) {  // eg: DEC $00
+static inline void DEC_ZEROPAGE(CPUState *state) {  // eg: DEC $00
     temp_address = read_memory(state, state->program_counter + 1); 
     temp = read_memory(state, temp_address); 
     temp--; 
@@ -894,7 +897,7 @@ void DEC_ZEROPAGE(CPUState *state) {  // eg: DEC $00
     #endif
 }
 
-void DEC_ZEROPAGE_X(CPUState *state) {  // eg: DEC $00,X
+static inline void DEC_ZEROPAGE_X(CPUState *state) {  // eg: DEC $00,X
     temp_address = (read_memory(state, state->program_counter + 1) + state->x_register) & 0xFF; 
     temp = read_memory(state, temp_address); 
     temp--; 
@@ -907,7 +910,7 @@ void DEC_ZEROPAGE_X(CPUState *state) {  // eg: DEC $00,X
     #endif
 }
 
-void DEC_ABSOLUTE(CPUState *state) {  // eg: DEC $0000
+static inline void DEC_ABSOLUTE(CPUState *state) {  // eg: DEC $0000
     temp_address = read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8); 
     temp = read_memory(state, temp_address); 
     temp--; 
@@ -920,7 +923,7 @@ void DEC_ABSOLUTE(CPUState *state) {  // eg: DEC $0000
     #endif
 }
 
-void DEC_ABSOLUTE_X(CPUState *state) {  // eg: DEC $0000,X
+static inline void DEC_ABSOLUTE_X(CPUState *state) {  // eg: DEC $0000,X
     temp_address = (read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8)) + state->x_register; 
     temp = read_memory(state, temp_address); 
     temp--; 
@@ -933,7 +936,7 @@ void DEC_ABSOLUTE_X(CPUState *state) {  // eg: DEC $0000,X
     #endif
 }
 
-void DEC_ABSOLUTE_Y(CPUState *state) {  // eg: DEC $0000,Y
+static inline void DEC_ABSOLUTE_Y(CPUState *state) {  // eg: DEC $0000,Y
     temp_address = (read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8)) + state->y_register; 
     temp = read_memory(state, temp_address); 
     temp--; 
@@ -946,7 +949,7 @@ void DEC_ABSOLUTE_Y(CPUState *state) {  // eg: DEC $0000,Y
     #endif
 }
 
-void DEX(CPUState *state) {  // eg: DEX
+static inline void DEX(CPUState *state) {  // eg: DEX
     state->x_register--; 
     state->zero_flag = (state->x_register == 0); 
     state->negative_flag = (state->x_register & 0x80) != 0; 
@@ -956,7 +959,7 @@ void DEX(CPUState *state) {  // eg: DEX
     #endif
 }
 
-void DEY(CPUState *state) {  // eg: DEY
+static inline void DEY(CPUState *state) {  // eg: DEY
     state->y_register--; 
     state->zero_flag = (state->y_register == 0); 
     state->negative_flag = (state->y_register & 0x80) != 0; 
@@ -966,7 +969,7 @@ void DEY(CPUState *state) {  // eg: DEY
     #endif
 }
 
-void EOR_IMMEDIATE(CPUState *state) {  // eg: EOR #$01
+static inline void EOR_IMMEDIATE(CPUState *state) {  // eg: EOR #$01
     temp = read_memory(state, state->program_counter + 1); 
     state->accumulator ^= temp; 
     state->zero_flag = (state->accumulator == 0); 
@@ -977,7 +980,7 @@ void EOR_IMMEDIATE(CPUState *state) {  // eg: EOR #$01
     #endif
 }
 
-void EOR_ZEROPAGE(CPUState *state) {  // eg: EOR $00
+static inline void EOR_ZEROPAGE(CPUState *state) {  // eg: EOR $00
     temp_address = read_memory(state, state->program_counter + 1); 
     temp = read_memory(state, temp_address); 
     state->accumulator ^= temp; 
@@ -989,7 +992,7 @@ void EOR_ZEROPAGE(CPUState *state) {  // eg: EOR $00
     #endif
 }
 
-void EOR_ZEROPAGE_X(CPUState *state) {  // eg: EOR $00,X
+static inline void EOR_ZEROPAGE_X(CPUState *state) {  // eg: EOR $00,X
     temp_address = (read_memory(state, state->program_counter + 1) + state->x_register) & 0xFF; 
     temp = read_memory(state, temp_address); 
     state->accumulator ^= temp; 
@@ -1001,7 +1004,7 @@ void EOR_ZEROPAGE_X(CPUState *state) {  // eg: EOR $00,X
     #endif
 }
 
-void EOR_ABSOLUTE(CPUState *state) {  // eg: EOR $0000
+static inline void EOR_ABSOLUTE(CPUState *state) {  // eg: EOR $0000
     temp_address = read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8); 
     temp = read_memory(state, temp_address); 
     state->accumulator ^= temp; 
@@ -1013,7 +1016,7 @@ void EOR_ABSOLUTE(CPUState *state) {  // eg: EOR $0000
     #endif
 }
 
-void EOR_ABSOLUTE_X(CPUState *state) {  // eg: EOR $0000,X
+static inline void EOR_ABSOLUTE_X(CPUState *state) {  // eg: EOR $0000,X
     temp_address = (read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8)) + state->x_register; 
     temp = read_memory(state, temp_address); 
     state->accumulator ^= temp; 
@@ -1025,7 +1028,7 @@ void EOR_ABSOLUTE_X(CPUState *state) {  // eg: EOR $0000,X
     #endif
 }
 
-void EOR_ABSOLUTE_Y(CPUState *state) {  // eg: EOR $0000,Y
+static inline void EOR_ABSOLUTE_Y(CPUState *state) {  // eg: EOR $0000,Y
     temp_address = (read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8)) + state->y_register; 
     temp = read_memory(state, temp_address); 
     state->accumulator ^= temp; 
@@ -1037,7 +1040,7 @@ void EOR_ABSOLUTE_Y(CPUState *state) {  // eg: EOR $0000,Y
     #endif
 }
 
-void EOR_INDIRECT_X(CPUState *state) {  // eg: EOR ($00,X)
+static inline void EOR_INDIRECT_X(CPUState *state) {  // eg: EOR ($00,X)
     uint8_t ZEROPAGE_address = (read_memory(state, state->program_counter + 1) + state->x_register) & 0xFF; 
     temp_address = read_memory(state, ZEROPAGE_address) | (read_memory(state, (ZEROPAGE_address + 1)) & 0xFF) << 8; 
     temp = read_memory(state, temp_address); 
@@ -1050,7 +1053,7 @@ void EOR_INDIRECT_X(CPUState *state) {  // eg: EOR ($00,X)
     #endif
 }
 
-void EOR_INDIRECT_Y(CPUState *state) {  // eg: EOR ($00),Y
+static inline void EOR_INDIRECT_Y(CPUState *state) {  // eg: EOR ($00),Y
     uint8_t ZEROPAGE_address = read_memory(state, state->program_counter + 1); 
     temp_address = (read_memory(state, ZEROPAGE_address) | (read_memory(state, (ZEROPAGE_address + 1)) & 0xFF) << 8) + state->y_register; 
     temp = read_memory(state, temp_address); 
@@ -1063,7 +1066,7 @@ void EOR_INDIRECT_Y(CPUState *state) {  // eg: EOR ($00),Y
     #endif
 }
 
-void INC_ZEROPAGE(CPUState *state) {  // eg: INC $00
+static inline void INC_ZEROPAGE(CPUState *state) {  // eg: INC $00
     temp_address = read_memory(state, state->program_counter + 1); 
     temp = read_memory(state, temp_address); 
     temp++; 
@@ -1076,7 +1079,7 @@ void INC_ZEROPAGE(CPUState *state) {  // eg: INC $00
     #endif
 }
 
-void INC_ZEROPAGE_X(CPUState *state) {  // eg: INC $00,X
+static inline void INC_ZEROPAGE_X(CPUState *state) {  // eg: INC $00,X
     temp_address = (read_memory(state, state->program_counter + 1) + state->x_register) & 0xFF; 
     temp = read_memory(state, temp_address); 
     temp++; 
@@ -1089,7 +1092,7 @@ void INC_ZEROPAGE_X(CPUState *state) {  // eg: INC $00,X
     #endif
 }
 
-void INC_ABSOLUTE(CPUState *state) {  // eg: INC $0000
+static inline void INC_ABSOLUTE(CPUState *state) {  // eg: INC $0000
     temp_address = read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8); 
     temp = read_memory(state, temp_address); 
     temp++; 
@@ -1102,7 +1105,7 @@ void INC_ABSOLUTE(CPUState *state) {  // eg: INC $0000
     #endif
 }
 
-void INC_ABSOLUTE_X(CPUState *state) {  // eg: INC $0000,X
+static inline void INC_ABSOLUTE_X(CPUState *state) {  // eg: INC $0000,X
     temp_address = (read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8)) + state->x_register; 
     temp = read_memory(state, temp_address); 
     temp++; 
@@ -1115,7 +1118,7 @@ void INC_ABSOLUTE_X(CPUState *state) {  // eg: INC $0000,X
     #endif
 }
 
-void INC_ABSOLUTE_Y(CPUState *state) {  // eg: INC $0000,Y
+static inline void INC_ABSOLUTE_Y(CPUState *state) {  // eg: INC $0000,Y
     temp_address = (read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8)) + state->y_register; 
     temp = read_memory(state, temp_address); 
     temp++; 
@@ -1128,7 +1131,7 @@ void INC_ABSOLUTE_Y(CPUState *state) {  // eg: INC $0000,Y
     #endif
 }
 
-void INX(CPUState *state) {  // eg: INX
+static inline void INX(CPUState *state) {  // eg: INX
     state->x_register++; 
     state->zero_flag = (state->x_register == 0); 
     state->negative_flag = (state->x_register & 0x80) != 0; 
@@ -1138,7 +1141,7 @@ void INX(CPUState *state) {  // eg: INX
     #endif
 }
 
-void INY(CPUState *state) {  // eg: INY
+static inline void INY(CPUState *state) {  // eg: INY
     state->y_register++; 
     state->zero_flag = (state->y_register == 0); 
     state->negative_flag = (state->y_register & 0x80) != 0; 
@@ -1148,7 +1151,7 @@ void INY(CPUState *state) {  // eg: INY
     #endif
 }
 
-void JMP_ABSOLUTE(CPUState *state) {  // eg: JMP $0000
+static inline void JMP_ABSOLUTE(CPUState *state) {  // eg: JMP $0000
     temp_address = read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8); 
     state->program_counter = temp_address; 
     #if debug
@@ -1156,7 +1159,7 @@ void JMP_ABSOLUTE(CPUState *state) {  // eg: JMP $0000
     #endif
 }
 
-void JMP_INDIRECT(CPUState *state) {  // eg: JMP ($0000)
+static inline void JMP_INDIRECT(CPUState *state) {  // eg: JMP ($0000)
     uint16_t pointer_address = read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8); 
     temp_address = read_memory(state, pointer_address) | (read_memory(state, (pointer_address + 1)) & 0xFFFF) << 8; 
     state->program_counter = temp_address; 
@@ -1165,18 +1168,29 @@ void JMP_INDIRECT(CPUState *state) {  // eg: JMP ($0000)
     #endif
 }
 
-void JSR(CPUState *state) {  // eg: JSR $0000
+static inline void JSR(CPUState *state) {  // eg: JSR $0000
+
+    temp_address = read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8); 
+    for (int i = 0; i < sizeof(hooked_address) / sizeof(hooked_address[0]); i++) {
+        if (temp_address == hooked_address[i].address && hooked_address[i].hook_function != NULL) {
+            hooked_address[i].hook_function(state);  // Call the hook function
+            state->halt_reason = KEYBOARD_BUFFER_OVERFLOW_REASON;
+            state->halt_flag = true;  // Set the halt flag to true
+            state->program_counter += 3;  // Move the program counter past the JSR instruction
+            return;  // Exit the JSR function after calling the hook
+        }
+    }
+
     uint16_t return_address = state->program_counter + 2; 
     push_stack(state, (return_address >> 8) & 0xFF); 
     push_stack(state, return_address & 0xFF);
-    temp_address = read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8); 
     state->program_counter = temp_address; 
     #if debug
     snprintf(state->disassembly, sizeof(state->disassembly), "$%04X: JSR $%04X", state->program_counter - 3, temp_address);
     #endif
 }
 
-void LDA_IMMEDIATE(CPUState *state) {  // eg: LDA #$01
+static inline void LDA_IMMEDIATE(CPUState *state) {  // eg: LDA #$01
     state->accumulator = read_memory(state, state->program_counter + 1); 
     state->zero_flag = (state->accumulator == 0); 
     state->negative_flag = (state->accumulator & 0x80) != 0; 
@@ -1186,7 +1200,7 @@ void LDA_IMMEDIATE(CPUState *state) {  // eg: LDA #$01
     #endif
 }
 
-void LDA_ZEROPAGE(CPUState *state) {  // eg: LDA $00
+static inline void LDA_ZEROPAGE(CPUState *state) {  // eg: LDA $00
     temp_address = read_memory(state, state->program_counter + 1); 
     state->accumulator = read_memory(state, temp_address); 
     state->zero_flag = (state->accumulator == 0); 
@@ -1197,7 +1211,7 @@ void LDA_ZEROPAGE(CPUState *state) {  // eg: LDA $00
     #endif
 }
 
-void LDA_ZEROPAGE_X(CPUState *state) {  // eg: LDA $00,X
+static inline void LDA_ZEROPAGE_X(CPUState *state) {  // eg: LDA $00,X
     temp_address = (read_memory(state, state->program_counter + 1) + state->x_register) & 0xFF; 
     state->accumulator = read_memory(state, temp_address); 
     state->zero_flag = (state->accumulator == 0); 
@@ -1208,7 +1222,7 @@ void LDA_ZEROPAGE_X(CPUState *state) {  // eg: LDA $00,X
     #endif
 }
 
-void LDA_ABSOLUTE(CPUState *state) {  // eg: LDA $0000
+static inline void LDA_ABSOLUTE(CPUState *state) {  // eg: LDA $0000
     temp_address = read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8); 
     state->accumulator = read_memory(state, temp_address); 
     state->zero_flag = (state->accumulator == 0); 
@@ -1219,7 +1233,7 @@ void LDA_ABSOLUTE(CPUState *state) {  // eg: LDA $0000
     #endif
 }
 
-void LDA_ABSOLUTE_X(CPUState *state) {  // eg: LDA $0000,X
+static inline void LDA_ABSOLUTE_X(CPUState *state) {  // eg: LDA $0000,X
     temp_address = (read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8)) + state->x_register; 
     state->accumulator = read_memory(state, temp_address); 
     state->zero_flag = (state->accumulator == 0); 
@@ -1230,7 +1244,7 @@ void LDA_ABSOLUTE_X(CPUState *state) {  // eg: LDA $0000,X
     #endif
 }
 
-void LDA_ABSOLUTE_Y(CPUState *state) {  // eg: LDA $0000,Y
+static inline void LDA_ABSOLUTE_Y(CPUState *state) {  // eg: LDA $0000,Y
     temp_address = (read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8)) + state->y_register; 
     state->accumulator = read_memory(state, temp_address); 
     state->zero_flag = (state->accumulator == 0); 
@@ -1241,7 +1255,7 @@ void LDA_ABSOLUTE_Y(CPUState *state) {  // eg: LDA $0000,Y
     #endif
 }
 
-void LDA_INDIRECT_X(CPUState *state) {  // eg: LDA ($00,X)
+static inline void LDA_INDIRECT_X(CPUState *state) {  // eg: LDA ($00,X)
     uint8_t ZEROPAGE_address = (read_memory(state, state->program_counter + 1) + state->x_register) & 0xFF; 
     temp_address = read_memory(state, ZEROPAGE_address) | (read_memory(state, (ZEROPAGE_address + 1)) & 0xFF) << 8; 
     state->accumulator = read_memory(state, temp_address); 
@@ -1253,7 +1267,7 @@ void LDA_INDIRECT_X(CPUState *state) {  // eg: LDA ($00,X)
     #endif
 }
 
-void LDA_INDIRECT_Y(CPUState *state) {  // eg: LDA ($00),Y
+static inline void LDA_INDIRECT_Y(CPUState *state) {  // eg: LDA ($00),Y
     uint8_t ZEROPAGE_address = read_memory(state, state->program_counter + 1); 
     temp_address = (read_memory(state, ZEROPAGE_address) | (read_memory(state, (ZEROPAGE_address + 1)) & 0xFF) << 8) + state->y_register; 
     state->accumulator = read_memory(state, temp_address); 
@@ -1265,7 +1279,7 @@ void LDA_INDIRECT_Y(CPUState *state) {  // eg: LDA ($00),Y
     #endif
 }
 
-void LDX_IMMEDIATE(CPUState *state) {  // eg: LDX #$01
+static inline void LDX_IMMEDIATE(CPUState *state) {  // eg: LDX #$01
     state->x_register = read_memory(state, state->program_counter + 1); 
     state->zero_flag = (state->x_register == 0); 
     state->negative_flag = (state->x_register & 0x80) != 0; 
@@ -1275,7 +1289,7 @@ void LDX_IMMEDIATE(CPUState *state) {  // eg: LDX #$01
     #endif
 }
 
-void LDX_ZEROPAGE(CPUState *state) {  // eg: LDX $00
+static inline void LDX_ZEROPAGE(CPUState *state) {  // eg: LDX $00
     temp_address = read_memory(state, state->program_counter + 1); 
     state->x_register = read_memory(state, temp_address); 
     state->zero_flag = (state->x_register == 0); 
@@ -1286,7 +1300,7 @@ void LDX_ZEROPAGE(CPUState *state) {  // eg: LDX $00
     #endif
 }
 
-void LDX_ZEROPAGE_Y(CPUState *state) {  // eg: LDX $00,Y
+static inline void LDX_ZEROPAGE_Y(CPUState *state) {  // eg: LDX $00,Y
     temp_address = (read_memory(state, state->program_counter + 1) + state->y_register) & 0xFF; 
     state->x_register = read_memory(state, temp_address); 
     state->zero_flag = (state->x_register == 0); 
@@ -1297,7 +1311,7 @@ void LDX_ZEROPAGE_Y(CPUState *state) {  // eg: LDX $00,Y
     #endif
 }
 
-void LDX_ABSOLUTE(CPUState *state) {  // eg: LDX $0000
+static inline void LDX_ABSOLUTE(CPUState *state) {  // eg: LDX $0000
     temp_address = read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8); 
     state->x_register = read_memory(state, temp_address); 
     state->zero_flag = (state->x_register == 0); 
@@ -1308,7 +1322,7 @@ void LDX_ABSOLUTE(CPUState *state) {  // eg: LDX $0000
     #endif
 }
 
-void LDX_ABSOLUTE_Y(CPUState *state) {  // eg: LDX $0000,Y
+static inline void LDX_ABSOLUTE_Y(CPUState *state) {  // eg: LDX $0000,Y
     temp_address = (read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8)) + state->y_register; 
     state->x_register = read_memory(state, temp_address); 
     state->zero_flag = (state->x_register == 0); 
@@ -1319,7 +1333,7 @@ void LDX_ABSOLUTE_Y(CPUState *state) {  // eg: LDX $0000,Y
     #endif
 }
 
-void LDY_IMMEDIATE(CPUState *state) {  // eg: LDY #$01
+static inline void LDY_IMMEDIATE(CPUState *state) {  // eg: LDY #$01
     state->y_register = read_memory(state, state->program_counter + 1); 
     state->zero_flag = (state->y_register == 0); 
     state->negative_flag = (state->y_register & 0x80) != 0; 
@@ -1329,7 +1343,7 @@ void LDY_IMMEDIATE(CPUState *state) {  // eg: LDY #$01
     #endif
 }
 
-void LDY_ZEROPAGE(CPUState *state) {  // eg: LDY $00
+static inline void LDY_ZEROPAGE(CPUState *state) {  // eg: LDY $00
     temp_address = read_memory(state, state->program_counter + 1); 
     state->y_register = read_memory(state, temp_address); 
     state->zero_flag = (state->y_register == 0); 
@@ -1340,7 +1354,7 @@ void LDY_ZEROPAGE(CPUState *state) {  // eg: LDY $00
     #endif
 }
 
-void LDY_ZEROPAGE_X(CPUState *state) {  // eg: LDY $00,X
+static inline void LDY_ZEROPAGE_X(CPUState *state) {  // eg: LDY $00,X
     temp_address = (read_memory(state, state->program_counter + 1) + state->x_register) & 0xFF; 
     state->y_register = read_memory(state, temp_address); 
     state->zero_flag = (state->y_register == 0); 
@@ -1351,7 +1365,7 @@ void LDY_ZEROPAGE_X(CPUState *state) {  // eg: LDY $00,X
     #endif
 }
 
-void LDY_ABSOLUTE(CPUState *state) {  // eg: LDY $0000
+static inline void LDY_ABSOLUTE(CPUState *state) {  // eg: LDY $0000
     temp_address = read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8); 
     state->y_register = read_memory(state, temp_address); 
     state->zero_flag = (state->y_register == 0); 
@@ -1362,7 +1376,7 @@ void LDY_ABSOLUTE(CPUState *state) {  // eg: LDY $0000
     #endif
 }
 
-void LDY_ABSOLUTE_X(CPUState *state) {  // eg: LDY $0000,X
+static inline void LDY_ABSOLUTE_X(CPUState *state) {  // eg: LDY $0000,X
     temp_address = (read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8)) + state->x_register; 
     state->y_register = read_memory(state, temp_address); 
     state->zero_flag = (state->y_register == 0); 
@@ -1373,7 +1387,7 @@ void LDY_ABSOLUTE_X(CPUState *state) {  // eg: LDY $0000,X
     #endif
 }
 
-void LDY_INDIRECT_X(CPUState *state) {  // eg: LDY ($00,X)
+static inline void LDY_INDIRECT_X(CPUState *state) {  // eg: LDY ($00,X)
     uint8_t ZEROPAGE_address = (read_memory(state, state->program_counter + 1) + state->x_register) & 0xFF; 
     temp_address = read_memory(state, ZEROPAGE_address) | (read_memory(state, (ZEROPAGE_address + 1)) & 0xFF) << 8; 
     state->y_register = read_memory(state, temp_address); 
@@ -1385,7 +1399,7 @@ void LDY_INDIRECT_X(CPUState *state) {  // eg: LDY ($00,X)
     #endif
 }
 
-void LDY_INDIRECT_Y(CPUState *state) {  // eg: LDY ($00),Y
+static inline void LDY_INDIRECT_Y(CPUState *state) {  // eg: LDY ($00),Y
     uint8_t ZEROPAGE_address = read_memory(state, state->program_counter + 1); 
     temp_address = (read_memory(state, ZEROPAGE_address) | (read_memory(state, (ZEROPAGE_address + 1)) & 0xFF) << 8) + state->y_register; 
     state->y_register = read_memory(state, temp_address); 
@@ -1397,14 +1411,14 @@ void LDY_INDIRECT_Y(CPUState *state) {  // eg: LDY ($00),Y
     #endif
 }
 
-void NOP(CPUState *state) {  // eg: NOP
+static inline void NOP(CPUState *state) {  // eg: NOP
     state->program_counter += 1; 
     #if debug
     snprintf(state->disassembly, sizeof(state->disassembly), "$%04X: NOP", state->program_counter - 1);
     #endif
 }
 
-void LSR_IMMEDIATE(CPUState *state) {  // $4A = LSR Accumulator (1-byte)
+static inline void LSR_IMMEDIATE(CPUState *state) {  // $4A = LSR Accumulator (1-byte)
     state->carry_flag = (state->accumulator & 0x01);
     state->accumulator >>= 1;
     state->zero_flag = (state->accumulator == 0);
@@ -1415,7 +1429,7 @@ void LSR_IMMEDIATE(CPUState *state) {  // $4A = LSR Accumulator (1-byte)
     #endif
 }
 
-void LSR_ZEROPAGE(CPUState *state) {  // eg: LSR $00
+static inline void LSR_ZEROPAGE(CPUState *state) {  // eg: LSR $00
     temp_address = read_memory(state, state->program_counter + 1); 
     temp = read_memory(state, temp_address); 
     state->carry_flag = (temp & 0x01); 
@@ -1429,7 +1443,7 @@ void LSR_ZEROPAGE(CPUState *state) {  // eg: LSR $00
     #endif
 }
 
-void LSR_ZEROPAGE_X(CPUState *state) {  // eg: LSR $00,X
+static inline void LSR_ZEROPAGE_X(CPUState *state) {  // eg: LSR $00,X
     temp_address = (read_memory(state, state->program_counter + 1) + state->x_register) & 0xFF; 
     temp = read_memory(state, temp_address); 
     state->carry_flag = (temp & 0x01); 
@@ -1443,7 +1457,7 @@ void LSR_ZEROPAGE_X(CPUState *state) {  // eg: LSR $00,X
     #endif
 }
 
-void LSR_ABSOLUTE(CPUState *state) {  // eg: LSR $0000
+static inline void LSR_ABSOLUTE(CPUState *state) {  // eg: LSR $0000
     temp_address = read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8); 
     temp = read_memory(state, temp_address); 
     state->carry_flag = (temp & 0x01); 
@@ -1457,7 +1471,7 @@ void LSR_ABSOLUTE(CPUState *state) {  // eg: LSR $0000
     #endif
 }
 
-void LSR_ABSOLUTE_X(CPUState *state) {  // eg: LSR $0000,X
+static inline void LSR_ABSOLUTE_X(CPUState *state) {  // eg: LSR $0000,X
     temp_address = (read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8)) + state->x_register; 
     temp = read_memory(state, temp_address); 
     state->carry_flag = (temp & 0x01); 
@@ -1471,7 +1485,7 @@ void LSR_ABSOLUTE_X(CPUState *state) {  // eg: LSR $0000,X
     #endif
 }
 
-void LSR_ABSOLUTE_Y(CPUState *state) {  // eg: LSR $0000,Y
+static inline void LSR_ABSOLUTE_Y(CPUState *state) {  // eg: LSR $0000,Y
     temp_address = (read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8)) + state->y_register; 
     temp = read_memory(state, temp_address); 
     state->carry_flag = (temp & 0x01); 
@@ -1485,7 +1499,7 @@ void LSR_ABSOLUTE_Y(CPUState *state) {  // eg: LSR $0000,Y
     #endif
 }
 
-void LSR_INDIRECT_X(CPUState *state) {  // eg: LSR ($00,X)
+static inline void LSR_INDIRECT_X(CPUState *state) {  // eg: LSR ($00,X)
     uint8_t ZEROPAGE_address = (read_memory(state, state->program_counter + 1) + state->x_register) & 0xFF; 
     temp_address = read_memory(state, ZEROPAGE_address) | (read_memory(state, (ZEROPAGE_address + 1)) & 0xFF) << 8; 
     temp = read_memory(state, temp_address); 
@@ -1500,7 +1514,7 @@ void LSR_INDIRECT_X(CPUState *state) {  // eg: LSR ($00,X)
     #endif
 }
 
-void LSR_INDIRECT_Y(CPUState *state) {  // eg: LSR ($00),Y
+static inline void LSR_INDIRECT_Y(CPUState *state) {  // eg: LSR ($00),Y
     uint8_t ZEROPAGE_address = read_memory(state, state->program_counter + 1); 
     temp_address = (read_memory(state, ZEROPAGE_address) | (read_memory(state, (ZEROPAGE_address + 1)) & 0xFF) << 8) + state->y_register; 
     temp = read_memory(state, temp_address); 
@@ -1515,7 +1529,7 @@ void LSR_INDIRECT_Y(CPUState *state) {  // eg: LSR ($00),Y
     #endif
 }
 
-void ORA_IMMEDIATE(CPUState *state) {  // eg: ORA #$01
+static inline void ORA_IMMEDIATE(CPUState *state) {  // eg: ORA #$01
     state->accumulator |= read_memory(state, state->program_counter + 1); 
     state->zero_flag = (state->accumulator == 0); 
     state->negative_flag = (state->accumulator & 0x80) != 0; 
@@ -1525,7 +1539,7 @@ void ORA_IMMEDIATE(CPUState *state) {  // eg: ORA #$01
     #endif
 }
 
-void ORA_ZEROPAGE(CPUState *state) {  // eg: ORA $00
+static inline void ORA_ZEROPAGE(CPUState *state) {  // eg: ORA $00
     temp_address = read_memory(state, state->program_counter + 1); 
     state->accumulator |= read_memory(state, temp_address); 
     state->zero_flag = (state->accumulator == 0); 
@@ -1536,7 +1550,7 @@ void ORA_ZEROPAGE(CPUState *state) {  // eg: ORA $00
     #endif
 }
 
-void ORA_ZEROPAGE_X(CPUState *state) {  // eg: ORA $00,X
+static inline void ORA_ZEROPAGE_X(CPUState *state) {  // eg: ORA $00,X
     temp_address = (read_memory(state, state->program_counter + 1) + state->x_register) & 0xFF; 
     state->accumulator |= read_memory(state, temp_address); 
     state->zero_flag = (state->accumulator == 0); 
@@ -1547,7 +1561,7 @@ void ORA_ZEROPAGE_X(CPUState *state) {  // eg: ORA $00,X
     #endif
 }
 
-void ORA_ABSOLUTE(CPUState *state) {  // eg: ORA $0000
+static inline void ORA_ABSOLUTE(CPUState *state) {  // eg: ORA $0000
     temp_address = read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8); 
     state->accumulator |= read_memory(state, temp_address); 
     state->zero_flag = (state->accumulator == 0); 
@@ -1558,7 +1572,7 @@ void ORA_ABSOLUTE(CPUState *state) {  // eg: ORA $0000
     #endif
 }
 
-void ORA_ABSOLUTE_X(CPUState *state) {  // eg: ORA $0000,X
+static inline void ORA_ABSOLUTE_X(CPUState *state) {  // eg: ORA $0000,X
     temp_address = (read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8)) + state->x_register; 
     state->accumulator |= read_memory(state, temp_address); 
     state->zero_flag = (state->accumulator == 0); 
@@ -1569,7 +1583,7 @@ void ORA_ABSOLUTE_X(CPUState *state) {  // eg: ORA $0000,X
     #endif
 }
 
-void ORA_ABSOLUTE_Y(CPUState *state) {  // eg: ORA $0000,Y
+static inline void ORA_ABSOLUTE_Y(CPUState *state) {  // eg: ORA $0000,Y
     temp_address = (read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8)) + state->y_register; 
     state->accumulator |= read_memory(state, temp_address); 
     state->zero_flag = (state->accumulator == 0); 
@@ -1580,7 +1594,7 @@ void ORA_ABSOLUTE_Y(CPUState *state) {  // eg: ORA $0000,Y
     #endif
 }
 
-void ORA_INDIRECT_X(CPUState *state) {  // eg: ORA ($00,X)
+static inline void ORA_INDIRECT_X(CPUState *state) {  // eg: ORA ($00,X)
     uint8_t ZEROPAGE_address = (read_memory(state, state->program_counter + 1) + state->x_register) & 0xFF; 
     temp_address = read_memory(state, ZEROPAGE_address) | (read_memory(state, (ZEROPAGE_address + 1)) & 0xFF) << 8; 
     state->accumulator |= read_memory(state, temp_address); 
@@ -1592,7 +1606,7 @@ void ORA_INDIRECT_X(CPUState *state) {  // eg: ORA ($00,X)
     #endif
 }
 
-void ORA_INDIRECT_Y(CPUState *state) {  // eg: ORA ($00),Y
+static inline void ORA_INDIRECT_Y(CPUState *state) {  // eg: ORA ($00),Y
     uint8_t ZEROPAGE_address = read_memory(state, state->program_counter + 1); 
     temp_address = (read_memory(state, ZEROPAGE_address) | (read_memory(state, (ZEROPAGE_address + 1)) & 0xFF) << 8) + state->y_register; 
     state->accumulator |= read_memory(state, temp_address); 
@@ -1604,7 +1618,7 @@ void ORA_INDIRECT_Y(CPUState *state) {  // eg: ORA ($00),Y
     #endif
 }
 
-void PHA(CPUState *state) {  // eg: PHA
+static inline void PHA(CPUState *state) {  // eg: PHA
     push_stack(state, state->accumulator);
     state->program_counter += 1; 
     #if debug
@@ -1612,7 +1626,7 @@ void PHA(CPUState *state) {  // eg: PHA
     #endif
 }
 
-void PHP(CPUState *state) {  // eg: PHP
+static inline void PHP(CPUState *state) {  // eg: PHP
     uint8_t status = ((uint8_t)state->negative_flag     << 7)
                    | ((uint8_t)state->overflow_flag     << 6)
                    | (1                                 << 5)
@@ -1628,7 +1642,7 @@ void PHP(CPUState *state) {  // eg: PHP
     #endif
 }
 
-void PLA(CPUState *state) {  // eg: PLA
+static inline void PLA(CPUState *state) {  // eg: PLA
     state->accumulator = pop_stack(state);
     state->zero_flag = (state->accumulator == 0); 
     state->negative_flag = (state->accumulator & 0x80) != 0; 
@@ -1638,7 +1652,7 @@ void PLA(CPUState *state) {  // eg: PLA
     #endif
 }
 
-void PLP(CPUState *state) {  // eg: PLP
+static inline void PLP(CPUState *state) {  // eg: PLP
     uint8_t status = pop_stack(state);
     state->negative_flag = (status >> 7) & 1; 
     state->overflow_flag = (status >> 6) & 1; 
@@ -1653,7 +1667,7 @@ void PLP(CPUState *state) {  // eg: PLP
     #endif
 }
 
-void ROL_ACCUMULATOR(CPUState *state) {  // eg: ROL
+static inline void ROL_ACCUMULATOR(CPUState *state) {  // eg: ROL
     uint8_t carry_in = state->carry_flag; 
     state->carry_flag = (state->accumulator & 0x80) != 0; 
     state->accumulator = (state->accumulator << 1) | carry_in; 
@@ -1665,7 +1679,7 @@ void ROL_ACCUMULATOR(CPUState *state) {  // eg: ROL
     #endif
 }
 
-void ROL_ZEROPAGE(CPUState *state) {  // eg: ROL $00
+static inline void ROL_ZEROPAGE(CPUState *state) {  // eg: ROL $00
     temp_address = read_memory(state, state->program_counter + 1); 
     uint8_t carry_in = state->carry_flag; 
     state->carry_flag = (read_memory(state, temp_address) & 0x80) != 0; 
@@ -1678,7 +1692,7 @@ void ROL_ZEROPAGE(CPUState *state) {  // eg: ROL $00
     #endif
 }
 
-void ROL_ZEROPAGE_X(CPUState *state) {  // eg: ROL $00,X
+static inline void ROL_ZEROPAGE_X(CPUState *state) {  // eg: ROL $00,X
     temp_address = (read_memory(state, state->program_counter + 1) + state->x_register) & 0xFF; 
     uint8_t carry_in = state->carry_flag; 
     state->carry_flag = (read_memory(state, temp_address) & 0x80) != 0; 
@@ -1691,7 +1705,7 @@ void ROL_ZEROPAGE_X(CPUState *state) {  // eg: ROL $00,X
     #endif
 }
 
-void ROL_ABSOLUTE(CPUState *state) {  // eg: ROL $0000
+static inline void ROL_ABSOLUTE(CPUState *state) {  // eg: ROL $0000
     temp_address = read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8); 
     uint8_t carry_in = state->carry_flag; 
     state->carry_flag = (read_memory(state, temp_address) & 0x80) != 0; 
@@ -1704,7 +1718,7 @@ void ROL_ABSOLUTE(CPUState *state) {  // eg: ROL $0000
     #endif
 }
 
-void ROL_ABSOLUTE_X(CPUState *state) {  // eg: ROL $0000,X
+static inline void ROL_ABSOLUTE_X(CPUState *state) {  // eg: ROL $0000,X
     temp_address = (read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8)) + state->x_register; 
     uint8_t carry_in = state->carry_flag; 
     state->carry_flag = (read_memory(state, temp_address) & 0x80) != 0; 
@@ -1717,7 +1731,7 @@ void ROL_ABSOLUTE_X(CPUState *state) {  // eg: ROL $0000,X
     #endif
 }
 
-void ROR_ACCUMULATOR(CPUState *state) {  // eg: ROR
+static inline void ROR_ACCUMULATOR(CPUState *state) {  // eg: ROR
     uint8_t carry_in = state->carry_flag; 
     state->carry_flag = (state->accumulator & 0x01) != 0; 
     state->accumulator = (state->accumulator >> 1) | (carry_in << 7); 
@@ -1729,7 +1743,7 @@ void ROR_ACCUMULATOR(CPUState *state) {  // eg: ROR
     #endif
 }
 
-void ROR_ZEROPAGE(CPUState *state) {  // eg: ROR $00
+static inline void ROR_ZEROPAGE(CPUState *state) {  // eg: ROR $00
     temp_address = read_memory(state, state->program_counter + 1); 
     uint8_t carry_in = state->carry_flag; 
     state->carry_flag = (read_memory(state, temp_address) & 0x01) != 0; 
@@ -1742,7 +1756,7 @@ void ROR_ZEROPAGE(CPUState *state) {  // eg: ROR $00
     #endif
 }
 
-void ROR_ZEROPAGE_X(CPUState *state) {  // eg: ROR $00,X
+static inline void ROR_ZEROPAGE_X(CPUState *state) {  // eg: ROR $00,X
     temp_address = (read_memory(state, state->program_counter + 1) + state->x_register) & 0xFF; 
     uint8_t carry_in = state->carry_flag; 
     state->carry_flag = (read_memory(state, temp_address) & 0x01) != 0; 
@@ -1755,7 +1769,7 @@ void ROR_ZEROPAGE_X(CPUState *state) {  // eg: ROR $00,X
     #endif
 }
 
-void ROR_ABSOLUTE(CPUState *state) {  // eg: ROR $0000
+static inline void ROR_ABSOLUTE(CPUState *state) {  // eg: ROR $0000
     temp_address = read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8); 
     uint8_t carry_in = state->carry_flag; 
     state->carry_flag = (read_memory(state, temp_address) & 0x01) != 0; 
@@ -1768,7 +1782,7 @@ void ROR_ABSOLUTE(CPUState *state) {  // eg: ROR $0000
     #endif
 }
 
-void ROR_ABSOLUTE_X(CPUState *state) {  // eg: ROR $0000,X
+static inline void ROR_ABSOLUTE_X(CPUState *state) {  // eg: ROR $0000,X
     temp_address = (read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8)) + state->x_register; 
     uint8_t carry_in = state->carry_flag; 
     state->carry_flag = (read_memory(state, temp_address) & 0x01) != 0; 
@@ -1781,7 +1795,7 @@ void ROR_ABSOLUTE_X(CPUState *state) {  // eg: ROR $0000,X
     #endif
 }
 
-void RTI(CPUState *state) {  // eg: RTI
+static inline void RTI(CPUState *state) {  // eg: RTI
     uint8_t status = pop_stack(state);
     state->negative_flag = (status >> 7) & 1; 
     state->overflow_flag = (status >> 6) & 1; 
@@ -1798,14 +1812,14 @@ void RTI(CPUState *state) {  // eg: RTI
     #endif
 }
 
-void RTS(CPUState *state) {  // eg: RTS
+static inline void RTS(CPUState *state) {  // eg: RTS
     state->program_counter = pop_stack_16(state) + 1;
     #if debug
     snprintf(state->disassembly, sizeof(state->disassembly), "$%04X: RTS", state->program_counter - 1);
     #endif
 }
 
-void SBC_IMMEDIATE(CPUState *state) {  // eg: SBC #$01
+static inline void SBC_IMMEDIATE(CPUState *state) {  // eg: SBC #$01
     uint8_t value = read_memory(state, state->program_counter + 1);
     if (state->decimal_mode) {
         BCD_SUB(state, value);
@@ -1824,7 +1838,7 @@ void SBC_IMMEDIATE(CPUState *state) {  // eg: SBC #$01
     #endif
 }
 
-void SBC_ZEROPAGE(CPUState *state) {  // eg: SBC $00
+static inline void SBC_ZEROPAGE(CPUState *state) {  // eg: SBC $00
     uint8_t zp_address = read_memory(state, state->program_counter + 1);
     uint8_t value = read_memory(state, zp_address);
     if (state->decimal_mode) {
@@ -1844,7 +1858,7 @@ void SBC_ZEROPAGE(CPUState *state) {  // eg: SBC $00
     #endif
 }
 
-void SBC_ZEROPAGE_X(CPUState *state) {  // eg: SBC $00,X
+static inline void SBC_ZEROPAGE_X(CPUState *state) {  // eg: SBC $00,X
     uint8_t zp_address = (read_memory(state, state->program_counter + 1) + state->x_register) & 0xFF;
     uint8_t value = read_memory(state, zp_address);
     if (state->decimal_mode) {
@@ -1864,7 +1878,7 @@ void SBC_ZEROPAGE_X(CPUState *state) {  // eg: SBC $00,X
     #endif
 }
 
-void SBC_ABSOLUTE(CPUState *state) {  // eg: SBC $0000
+static inline void SBC_ABSOLUTE(CPUState *state) {  // eg: SBC $0000
     uint16_t abs_address = read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8);
     uint8_t value = read_memory(state, abs_address);
     if (state->decimal_mode) {
@@ -1884,7 +1898,7 @@ void SBC_ABSOLUTE(CPUState *state) {  // eg: SBC $0000
     #endif
 }
 
-void SBC_ABSOLUTE_X(CPUState *state) {  // eg: SBC $0000,X
+static inline void SBC_ABSOLUTE_X(CPUState *state) {  // eg: SBC $0000,X
     uint16_t abs_address = (read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8)) + state->x_register;
     uint8_t value = read_memory(state, abs_address);
     if (state->decimal_mode) {
@@ -1904,7 +1918,7 @@ void SBC_ABSOLUTE_X(CPUState *state) {  // eg: SBC $0000,X
     #endif
 }
 
-void SBC_ABSOLUTE_Y(CPUState *state) {  // eg: SBC $0000,Y
+static inline void SBC_ABSOLUTE_Y(CPUState *state) {  // eg: SBC $0000,Y
     uint16_t abs_address = (read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8)) + state->y_register;
     uint8_t value = read_memory(state, abs_address);
     if (state->decimal_mode) {
@@ -1924,7 +1938,7 @@ void SBC_ABSOLUTE_Y(CPUState *state) {  // eg: SBC $0000,Y
     #endif
 }
 
-void SBC_INDIRECT_X(CPUState *state) {  // eg: SBC ($00,X)
+static inline void SBC_INDIRECT_X(CPUState *state) {  // eg: SBC ($00,X)
     uint8_t ZEROPAGE_address = (read_memory(state, state->program_counter + 1) + state->x_register) & 0xFF;
     uint16_t ind_address = read_memory(state, ZEROPAGE_address) | (read_memory(state, (ZEROPAGE_address + 1)) & 0xFF) << 8;
     uint8_t value = read_memory(state, ind_address);
@@ -1945,7 +1959,7 @@ void SBC_INDIRECT_X(CPUState *state) {  // eg: SBC ($00,X)
     #endif
 }
 
-void SBC_INDIRECT_Y(CPUState *state) {  // eg: SBC ($00),Y
+static inline void SBC_INDIRECT_Y(CPUState *state) {  // eg: SBC ($00),Y
     uint8_t ZEROPAGE_address = read_memory(state, state->program_counter + 1);
     uint16_t ind_address = (read_memory(state, ZEROPAGE_address) | (read_memory(state, (ZEROPAGE_address + 1)) & 0xFF) << 8) + state->y_register;
     uint8_t value = read_memory(state, ind_address);
@@ -1967,7 +1981,7 @@ void SBC_INDIRECT_Y(CPUState *state) {  // eg: SBC ($00),Y
 }
 
 
-void STA_ZEROPAGE(CPUState *state) {  // eg: STA $00
+static inline void STA_ZEROPAGE(CPUState *state) {  // eg: STA $00
     temp_address = read_memory(state, state->program_counter + 1); 
     write_memory(state, temp_address, state->accumulator); 
     state->program_counter += 2; 
@@ -1976,7 +1990,7 @@ void STA_ZEROPAGE(CPUState *state) {  // eg: STA $00
     #endif
 }
 
-void STA_ZEROPAGE_X(CPUState *state) {  // eg: STA $00,X
+static inline void STA_ZEROPAGE_X(CPUState *state) {  // eg: STA $00,X
     temp_address = (read_memory(state, state->program_counter + 1) + state->x_register) & 0xFF; 
     write_memory(state, temp_address, state->accumulator); 
     state->program_counter += 2; 
@@ -1985,7 +1999,7 @@ void STA_ZEROPAGE_X(CPUState *state) {  // eg: STA $00,X
     #endif
 }
 
-void STA_ABSOLUTE(CPUState *state) {  // eg: STA $0000
+static inline void STA_ABSOLUTE(CPUState *state) {  // eg: STA $0000
     temp_address = read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8); 
     write_memory(state, temp_address, state->accumulator); 
     state->program_counter += 3; 
@@ -1994,7 +2008,7 @@ void STA_ABSOLUTE(CPUState *state) {  // eg: STA $0000
     #endif
 }
 
-void STA_ABSOLUTE_X(CPUState *state) {  // eg: STA $0000,X
+static inline void STA_ABSOLUTE_X(CPUState *state) {  // eg: STA $0000,X
     temp_address = (read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8)) + state->x_register; 
     write_memory(state, temp_address, state->accumulator); 
     state->program_counter += 3; 
@@ -2003,7 +2017,7 @@ void STA_ABSOLUTE_X(CPUState *state) {  // eg: STA $0000,X
     #endif
 }
 
-void STA_ABSOLUTE_Y(CPUState *state) {  // eg: STA $0000,Y
+static inline void STA_ABSOLUTE_Y(CPUState *state) {  // eg: STA $0000,Y
     temp_address = (read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8)) + state->y_register; 
     write_memory(state, temp_address, state->accumulator); 
     state->program_counter += 3; 
@@ -2012,7 +2026,7 @@ void STA_ABSOLUTE_Y(CPUState *state) {  // eg: STA $0000,Y
     #endif
 }
 
-void STA_INDIRECT_X(CPUState *state) {  // eg: STA ($00,X)
+static inline void STA_INDIRECT_X(CPUState *state) {  // eg: STA ($00,X)
     uint8_t ZEROPAGE_address = (read_memory(state, state->program_counter + 1) + state->x_register) & 0xFF; 
     temp_address = read_memory(state, ZEROPAGE_address) | (read_memory(state, (ZEROPAGE_address + 1)) & 0xFF) << 8; 
     write_memory(state, temp_address, state->accumulator); 
@@ -2022,7 +2036,7 @@ void STA_INDIRECT_X(CPUState *state) {  // eg: STA ($00,X)
     #endif
 }
 
-void STA_INDIRECT_Y(CPUState *state) {  // eg: STA ($00),Y
+static inline void STA_INDIRECT_Y(CPUState *state) {  // eg: STA ($00),Y
     uint8_t ZEROPAGE_address = read_memory(state, state->program_counter + 1); 
     temp_address = (read_memory(state, ZEROPAGE_address) | (read_memory(state, (ZEROPAGE_address + 1)) & 0xFF) << 8)     + state->y_register; 
     write_memory(state, temp_address, state->accumulator); 
@@ -2032,7 +2046,7 @@ void STA_INDIRECT_Y(CPUState *state) {  // eg: STA ($00),Y
     #endif
 }
 
-void STX_ZEROPAGE(CPUState *state) {  // eg: STX $00
+static inline void STX_ZEROPAGE(CPUState *state) {  // eg: STX $00
     temp_address = read_memory(state, state->program_counter + 1); 
     write_memory(state, temp_address, state->x_register); 
     state->program_counter += 2; 
@@ -2041,7 +2055,7 @@ void STX_ZEROPAGE(CPUState *state) {  // eg: STX $00
     #endif
 }
 
-void STX_ZEROPAGE_Y(CPUState *state) {  // eg: STX $00,Y
+static inline void STX_ZEROPAGE_Y(CPUState *state) {  // eg: STX $00,Y
     temp_address = (read_memory(state, state->program_counter + 1) + state->y_register) & 0xFF; 
     write_memory(state, temp_address, state->x_register); 
     state->program_counter += 2; 
@@ -2050,7 +2064,7 @@ void STX_ZEROPAGE_Y(CPUState *state) {  // eg: STX $00,Y
     #endif
 }
 
-void STX_ABSOLUTE(CPUState *state) {  // eg: STX $0000
+static inline void STX_ABSOLUTE(CPUState *state) {  // eg: STX $0000
     temp_address = read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8); 
     write_memory(state, temp_address, state->x_register); 
     state->program_counter += 3; 
@@ -2059,7 +2073,7 @@ void STX_ABSOLUTE(CPUState *state) {  // eg: STX $0000
     #endif
 }
 
-void STY_ZEROPAGE(CPUState *state) {  // eg: STY $00
+static inline void STY_ZEROPAGE(CPUState *state) {  // eg: STY $00
     temp_address = read_memory(state, state->program_counter + 1); 
     write_memory(state, temp_address, state->y_register); 
     state->program_counter += 2; 
@@ -2068,7 +2082,7 @@ void STY_ZEROPAGE(CPUState *state) {  // eg: STY $00
     #endif
 }
 
-void STY_ZEROPAGE_X(CPUState *state) {  // eg: STY $00,X
+static inline void STY_ZEROPAGE_X(CPUState *state) {  // eg: STY $00,X
     temp_address = (read_memory(state, state->program_counter + 1) + state->x_register) & 0xFF; 
     write_memory(state, temp_address, state->y_register); 
     state->program_counter += 2; 
@@ -2077,7 +2091,7 @@ void STY_ZEROPAGE_X(CPUState *state) {  // eg: STY $00,X
     #endif
 }
 
-void STY_ABSOLUTE(CPUState *state) {  // eg: STY $0000
+static inline void STY_ABSOLUTE(CPUState *state) {  // eg: STY $0000
     temp_address = read_memory(state, state->program_counter + 1) | (read_memory(state, state->program_counter + 2) << 8); 
     write_memory(state, temp_address, state->y_register); 
     state->program_counter += 3; 
@@ -2086,7 +2100,7 @@ void STY_ABSOLUTE(CPUState *state) {  // eg: STY $0000
     #endif
 }
 
-void TXS(CPUState *state) {  // eg: TXS
+static inline void TXS(CPUState *state) {  // eg: TXS
     state->stack_pointer = state->x_register; 
     state->program_counter += 1; 
     #if debug
@@ -2094,7 +2108,7 @@ void TXS(CPUState *state) {  // eg: TXS
     #endif
 }
 
-void TSX(CPUState *state) {  // eg: TSX
+static inline void TSX(CPUState *state) {  // eg: TSX
     state->x_register = state->stack_pointer; 
     state->zero_flag = (state->x_register == 0); 
     state->negative_flag = (state->x_register & 0x80) != 0; 
@@ -2104,7 +2118,7 @@ void TSX(CPUState *state) {  // eg: TSX
     #endif
 }
 
-void TXA(CPUState *state) {  // eg: TXA
+static inline void TXA(CPUState *state) {  // eg: TXA
     state->accumulator = state->x_register; 
     state->zero_flag = (state->accumulator == 0); 
     state->negative_flag = (state->accumulator & 0x80) != 0; 
@@ -2114,7 +2128,7 @@ void TXA(CPUState *state) {  // eg: TXA
     #endif
 }
 
-void TYA(CPUState *state) {  // eg: TYA
+static inline void TYA(CPUState *state) {  // eg: TYA
     state->accumulator = state->y_register; 
     state->zero_flag = (state->accumulator == 0); 
     state->negative_flag = (state->accumulator & 0x80) != 0; 
@@ -2124,7 +2138,7 @@ void TYA(CPUState *state) {  // eg: TYA
     #endif
 }
 
-void TAY(CPUState *state) {  // eg: TAY
+static inline void TAY(CPUState *state) {  // eg: TAY
     state->y_register = state->accumulator; 
     state->zero_flag = (state->y_register == 0); 
     state->negative_flag = (state->y_register & 0x80) != 0; 
@@ -2134,7 +2148,7 @@ void TAY(CPUState *state) {  // eg: TAY
     #endif
 }
 
-void TAX(CPUState *state) {  // eg: TAX
+static inline void TAX(CPUState *state) {  // eg: TAX
     state->x_register = state->accumulator; 
     state->zero_flag = (state->x_register == 0); 
     state->negative_flag = (state->x_register & 0x80) != 0; 
@@ -2144,7 +2158,7 @@ void TAX(CPUState *state) {  // eg: TAX
     #endif
 }
 
-void SEC(CPUState *state) {  // eg: SEC
+static inline void SEC(CPUState *state) {  // eg: SEC
     state->carry_flag = 1; 
     state->program_counter += 1; 
     #if debug
@@ -2152,7 +2166,7 @@ void SEC(CPUState *state) {  // eg: SEC
     #endif
 }
 
-void SED(CPUState *state) {  // eg: SED
+static inline void SED(CPUState *state) {  // eg: SED
     state->decimal_mode = 1; 
     state->program_counter += 1; 
     #if debug
@@ -2160,7 +2174,7 @@ void SED(CPUState *state) {  // eg: SED
     #endif
 }
 
-void SEI(CPUState *state) {  // eg: SEI
+static inline void SEI(CPUState *state) {  // eg: SEI
     state->interrupt_disable = 1; 
     state->program_counter += 1; 
     #if debug
@@ -2168,7 +2182,7 @@ void SEI(CPUState *state) {  // eg: SEI
     #endif
 }
 
-void trigger_irq(CPUState *state, uint16_t irq_source) {
+static inline void trigger_irq(CPUState *state, uint16_t irq_source) {
 
     state->IRQ_input = false; 
 

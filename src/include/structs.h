@@ -71,4 +71,9 @@ typedef struct {
     char disassembly[52];
 } CPUState;
 
+typedef struct {
+    uint16_t address;  // The address to hook
+    void (*hook_function)(CPUState *state);  // Pointer to the hook function
+} KernalHook_t;
+
 #endif // STRUCTS_H

@@ -1258,6 +1258,17 @@ void printf_add_big_atc(int x, int y, uint8_t color, const char *fmt, ...)
     }
 }
 
+char ascii_to_screencode(uint8_t c) {
+    if (c >= 0x20 && c <= 0x5F) {
+        return (char)c; // Direct mapping for printable ASCII
+    } else if (c == '\n' || c == '\r') {
+        return 0x0D; // Map newline and carriage return to PETSCII RETURN
+    } else if (c == 0x7F) {
+        return 0x14; // Map DEL to PETSCII DEL
+    }
+    return (char)c; // Return as-is for other characters
+}
+
 void printf_atc(int x, int y, uint8_t color, const char *fmt, ...)
 {
     va_list args;

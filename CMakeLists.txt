@@ -35,12 +35,13 @@ pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 add_executable(c64_plus 
-        src/6502_opcodes.c
         src/c64basic_emu.c
-        src/syscalls.c
+        src/modules/6502_opcodes.c
+        src/modules/syscalls.c
         src/modules/pwm.c
         src/modules/floatpoint.c
         src/modules/ringbuffer.c
+        src/modules/rom_hooks.c
         #libs/pico-lfs/src/pico_lfs.c
         )
 

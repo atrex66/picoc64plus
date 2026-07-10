@@ -34,6 +34,8 @@ extern uint16_t dma_transfer_count;
 extern uint8_t dma_incr;
 extern uint8_t dma_size;
 
+#define RESET_PIN 23  // GPIO pin for reset button
+
 void core1_entry();
 
 static uint8_t to_bcd(uint8_t value) {
@@ -113,6 +115,19 @@ void put_char(char b) {
     } 
 }
 
+void reset_irq(uint gpio, uint32_t events) {
+    if (gpio == RESET_PIN && (events & GPIO_IRQ_EDGE_FALL)) {
+        state.halt_flag = true;
+        reset_cpu(&state);
+        state.halt_flag = false;
+    }
+}
+
+bool timer_callback() {
+    memory[0xD012]++;
+    return true;  // Keep the timer repeating
+}
+
 int main()
 {
 
@@ -125,7 +140,7 @@ int main()
     sleep_ms(1000);  // wait for USB serial to be ready
 
     uint8_t counter = 0;
-    uint64_t timer=0;
+    uint64_t timing=0;
     int sox = BORDER_SIDE;
     int soy = BORDER_TOP;
     bool blink = true;  // cursor blink state
@@ -136,6 +151,16 @@ int main()
     SpriteAsset_t sprites[SPRITE_LEN] = {0};  // Array to hold sprite data
     memset(sprites, 0, sizeof(sprites));  // Initialize sprite data to zero
     multicore_launch_core1(core1_entry);  // start 6502 VM on core 1
+    gpio_set_irq_enabled_with_callback(
+        RESET_PIN,
+        GPIO_IRQ_EDGE_FALL,
+        true,
+        &reset_irq
+    );
+    
+    repeating_timer_t timer;
+    add_repeating_timer_us(-1000000 / 250, timer_callback, NULL, &timer);
+
     init_terminal(TOTAL_W, TOTAL_H);
     clear_terminal();
     init_big_characters('a', ' ', 31);
@@ -180,6 +205,7 @@ int main()
         hide_terminal_cursor();
         fill_background_buffer(border_buffer, memory[BORDER_COLOR_ADDRESS]); // Fill border buffer with default background color
         copy_to_screen(border_buffer, 0, 0); // Copy border buffer to screen
+        printf_atc(0, 0, 0, "%d", state.mops); // Copy text and color data to border buffer
         uint8_t cur_x = memory[CURSOR_X_ADDRESS];     // 0..39
         uint8_t cur_y = memory[CURSOR_Y_ADDRESS];     // 0..24
         uint8_t cur_enable = memory[CURSOR_ENABLE_ADDRESS];  // 0 = cursor on, otherwise off
@@ -213,12 +239,14 @@ int main()
         state.frame_ready_flag = true;  // set the frame ready flag in the CPU state
         memory[FRAME_READY_ADDRESS] = 1;  // set the frame ready flag in memory
         render_frame();
-        printf("\n\033[0m");
-        printf("OP/MS:%d\033[K\nPress SHIFT+INS to paste program\033[K\n", state.mops, memory[C64_KEY_COUNT]);
+        //printf("\n\033[0m");
+        //printf("OP/MS: %d\033[K", state.mops);
+        //printf("IRQ address: $%04X\033[K\n", memory[0x0314] | (memory[0x0315] << 8));
+        //printf("NMI address: $%04X\033[K\n", memory[0x0318] | (memory[0x0319] << 8));
     #endif
         frame_end();
-        if (time_us_64() - timer > 500000) {  // Toggle blink every 500 ms
-            timer = time_us_64();
+        if (time_us_64() - timing > 500000) {  // Toggle blink every 500 ms
+            timing = time_us_64();
             blink = !blink; // Toggle blink state
         }
     }
@@ -254,16 +282,7 @@ void core1_entry() {
         
     while (true) {
 
-        if (gpio_get(23) == 0) 
-        {
-            reset_cpu(&state);
-            // memcpy(&memory[0x0801], PLASMA_PRG_DATA, sizeof(PLASMA_PRG_DATA));
-
-        }
-
-        if ((counter++ & 0xFF) == 0xFF) {  // update raster line every 4 ms (250 Hz)
-            memory[0xD012]++;
-        }
+        counter++;
 
         if (memory[C64_KEY_COUNT] < 2) {  // Check if there's space in the keyboard buffer
             char key;
@@ -272,7 +291,8 @@ void core1_entry() {
             }
         }
 
-        if (!state.halt_flag) {
+         if (!state.halt_flag) \
+        {
             execute_opcode(&state, read_memory(&state, state.program_counter));
         }
 
@@ -281,6 +301,5 @@ void core1_entry() {
             last_counter = counter;
             last_tick_us = time_us_32();
         }
-
     }
 }

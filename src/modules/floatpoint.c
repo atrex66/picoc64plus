@@ -1,5 +1,14 @@
 #include "floatpoint.h"
 
+union c64float {
+    struct {
+        uint8_t exponent;
+        uint8_t mantissa[4];
+        uint8_t sign;
+    } c64float_t;
+    uint8_t bytes[6];
+};
+
 float c64_fac_to_ieee(const uint8_t* ram) {
     uint8_t exp  = ram[0x61]; // Exponent
     uint8_t s_byte = ram[0x66]; // Sign byte

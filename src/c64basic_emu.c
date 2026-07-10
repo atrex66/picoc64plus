@@ -119,6 +119,7 @@ void reset_irq(uint gpio, uint32_t events) {
     if (gpio == RESET_PIN && (events & GPIO_IRQ_EDGE_FALL)) {
         state.halt_flag = true;
         reset_cpu(&state);
+        ringbuffer_init();
         state.halt_flag = false;
     }
 }
@@ -171,7 +172,7 @@ int main()
     ringbuffer_init();  
     while (true) 
     {
-        if (state.halt_flag && state.halt_reason != 0) {
+        if (state.halt_flag && state.halt_reason != NO_REASON) {
             memset(screen, 0x20, FRAME_WIDTH * FRAME_HEIGHT);  
             memset(color_data, 0x01, FRAME_WIDTH * FRAME_HEIGHT);  
             memset(background, 0x00, FRAME_WIDTH * FRAME_HEIGHT);  
@@ -239,10 +240,6 @@ int main()
         state.frame_ready_flag = true;  
         memory[FRAME_READY_ADDRESS] = 1;  
         render_frame();
-        
-        
-        
-        
     #endif
         frame_end();
         if (time_us_64() - timing > 500000) {  

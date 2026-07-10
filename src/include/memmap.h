@@ -4,10 +4,6 @@
 #define turbo_mode 1
 #define use_host 0
 
-
-
-
-
 #if turbo_mode
     #define CPU_CLOCK_KHZ   375000              
     #define CPU_CORE_VOLTAGE VREG_VOLTAGE_1_30  
@@ -15,8 +11,6 @@
     #define CPU_CLOCK_KHZ   150000              
     #define CPU_CORE_VOLTAGE VREG_VOLTAGE_1_10  
 #endif
-
-
 
 #define KEY_BUFFER               0x0277
 #define KEY_COUNT                0x00C6
@@ -40,7 +34,6 @@
 #define TOD_MINUTES_ADDRESS      0xDC06
 #define TOD_HOURS_ADDRESS        0xDC07
 
-
 #define BORDER_SIDE    6           
 #define BORDER_TOP     2           
 #define C64_COLS       40
@@ -53,8 +46,6 @@
 #define C64_KEY_COUNT   0x00C6
 #define C64_KEY_BUF_MAX 0x0289
 
-
-
 typedef struct __attribute__((packed))
 {
     uint8_t width;                 
@@ -66,39 +57,13 @@ typedef struct __attribute__((packed))
     uint16_t pixel_color;          
 } SpriteAsset_t;
 
-
-
 #define SPRITE_START_ADDRESS 0xA000
 #define SPRITE_LEN 32
 #define SPRITE_END_ADDRESS (SPRITE_START_ADDRESS + SPRITE_LEN * sizeof(SpriteAsset_t)) 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 #define GPIO_STATE_ADDRESS     0xD02F  
 #define GPIO_DIRECTION_ADDRESS 0xD033  
 #define GPIO_PULLUP_ADDRESS    0xD037  
-
-
-
-
-
-
-
-
-
 
 #define I2C_ADDR_ADDR   0xD050
 #define I2C_DATA_ADDR   0xD051  
@@ -109,25 +74,6 @@ typedef struct __attribute__((packed))
 #define I2C_SDA_PIN  4
 #define I2C_SCL_PIN  5
 #define I2C_BUS      i2c0
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 #define DMA_CTRL_ADDR       0xD060
 #define DMA_SIZE_ADDR       0xD061
@@ -142,7 +88,6 @@ typedef struct __attribute__((packed))
 #define TIMER_ZERO_ADDRESS 0xD06E  
 #define US_TIMER_ADDRESS 0xD06F  
 
-
 #define FILE_CONTROL_COMMAND 0xD100
 
 #define FILE_CONTROL_STATUS 0xD101
@@ -151,14 +96,5 @@ typedef struct __attribute__((packed))
 #define FILE_LENGTH_ADDRESS 0xD104  
 #define FILENAME_MAX_LEN 32
 #define FILENAME_ADDRESS 0xD106
-
-
-
-
-
-
-
-
-
 
 #endif 

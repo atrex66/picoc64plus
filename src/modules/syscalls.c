@@ -17,6 +17,8 @@ extern uint16_t pwm_lvl[8];
 extern CPUState state;  
 extern uint8_t memory[MEMORY_SIZE];  
 
+extern void reset_cpu(CPUState *state);
+
 #define DMA_CHANNEL 11  
 dma_channel_config dma_config = {
 
@@ -36,7 +38,8 @@ void (*arm_opcode_functions[256])(CPUState *state) = {
     [0x02] = CLEAR_IRQ_SOURCE,
     [0x03] = SET_GPIO_IRQ,
     [0x04] = DISABLE_GPIO_IRQ,
-
+    [0x05] = RESET_CPU_SYS,
+    
     [0x80] = PWM_SETUP,  
     [0x81] = PWM_SET_FREQUENCY,  
     [0x82] = PWM_SET_DUTY,  
@@ -64,6 +67,13 @@ void (*arm_opcode_functions[256])(CPUState *state) = {
 
     [0xC0] = RENDER_WAIT_FRAME
 };
+
+
+void RESET_CPU_SYS(CPUState *state) {
+    state->halt_flag = true;
+    reset_cpu(state);
+    state->halt_flag = false;
+}
 
 void gpio_irq_callback(uint gpio, uint32_t events) {
     

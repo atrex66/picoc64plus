@@ -2,7 +2,8 @@
 #define ENUMS_H
 
 enum {
-    HELLO_REASON=0,
+    NO_REASON=0,
+    HELLO_REASON,
     SYSCALL_REASON,
     HALT_REASON,
     ILLEGAL_OPCODE_REASON,

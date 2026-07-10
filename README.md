@@ -39,14 +39,14 @@ there.
 
 ## Hardware
 
-|----------------------------------------------------------------------|
+
 | Component | Details                                                  |
 |-----------|----------------------------------------------------------|
 | MCU       | Raspberry Pi Pico 2 (RP2350)                             |
 | I/O       | USB CDC serial — use the included SDL2 terminal or PuTTY |
 | I2C       | GP4 (SDA) / GP5 (SCL), pull-ups enabled automatically    |
 | DMA       | DMA channel 11 dedicated for the virtual machine         |
-|----------------------------------------------------------------------|
+
 
 ---
 

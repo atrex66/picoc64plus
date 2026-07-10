@@ -7,20 +7,23 @@
 #include "enums.h"
 
 static const char* halt_reason[] = {
-    [0] = "Hello fellow programmer!",
-    [1] = "UNKNOWN SYSCALL",
-    [2] = "HALT instruction",
-    [3] = "Illegal opcode or unknown reason",
-    [4] = "GPIO_SET_PINMODE",
-    [5] = "GPIO_SET_PINOUT",
-    [6] = "GPIO_SET_PINPULL",
-    [7] = "GPIO_GET_PINSTATE",
-    [8] = "ADC_ILLEGAL_CHANNEL",
-    [9] = "DMA_CHANNEL_ALREADY_CLAIMED",
-    [10] = "KEYBOARD_BUFFER_OVERFLOW"
+    [0] = "No reason",
+    [1] = "Hello fellow programmer!",
+    [2] = "UNKNOWN SYSCALL",
+    [3] = "HALT instruction",
+    [4] = "Illegal opcode or unknown reason",
+    [5] = "GPIO_SET_PINMODE",
+    [6] = "GPIO_SET_PINOUT",
+    [7] = "GPIO_SET_PINPULL",
+    [8] = "GPIO_GET_PINSTATE",
+    [9] = "ADC_ILLEGAL_CHANNEL",
+    [10] = "DMA_CHANNEL_ALREADY_CLAIMED",
+    [11] = "KEYBOARD_BUFFER_OVERFLOW"
 };
 
 extern void (*arm_opcode_functions[256])(CPUState *state);
+
+void RESET_CPU_SYS(CPUState *state);
 
 void HELLO_FROM_ARM(CPUState *state);
 

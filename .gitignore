@@ -17,6 +17,10 @@ examples/basictetris.bas
 
 **/backup/
 
+build-pico/
+build-pico2/
+binary/
+
 remove_comments.py
 
 src/*.py

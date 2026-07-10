@@ -6,6 +6,6 @@
 #include "enums.h"
 
 extern KernalHook_t hooked_address[32];
-void keymatrix_scan(CPUState *state);  // Function prototype for the keymatrix scan hook
+void keymatrix_scan(CPUState *state);  
 
-#endif // ROM_HOOKS_H
+#endif 

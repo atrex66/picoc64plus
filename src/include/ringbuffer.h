@@ -12,4 +12,4 @@ bool ringbuffer_is_empty();
 bool ringbuffer_is_full();
 uint8_t ringbuffer_available(void);
 
-#endif // RINGBUFFER_H
+#endif 

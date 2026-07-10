@@ -17,16 +17,16 @@ bool ringbuffer_push(uint8_t value) {
     ring_buffer[rb_head] = value;
     uint8_t new_head = (rb_head + 1) % RING_BUFFER_SIZE;
     if (new_head == rb_tail) {
-        // Buffer would be full; overwrite oldest by moving tail
+        
         rb_tail = (rb_tail + 1) % RING_BUFFER_SIZE;
     }
     rb_head = new_head;
-    return true;  // always succeeds (overwrites old data)
+    return true;  
 }
 
 bool ringbuffer_pop(uint8_t *out_value) {
     if (rb_head == rb_tail) {
-        return false;  // buffer empty
+        return false;  
     }
     *out_value = ring_buffer[rb_tail];
     rb_tail = (rb_tail + 1) % RING_BUFFER_SIZE;

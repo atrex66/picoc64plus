@@ -1,5 +1,5 @@
 #pragma once
-// machine generated, do not edit!
+
 #include <stdint.h>
 #include <stddef.h>
 

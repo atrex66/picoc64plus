@@ -1,4 +1,4 @@
-##C64-inspired development platform for modern microcontrollers
+## C64-inspired development platform for modern microcontrollers
 
 Program the Pico peripherals like in the 80's
 

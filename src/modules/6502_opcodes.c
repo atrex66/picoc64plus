@@ -92,10 +92,18 @@ void reset_cpu(CPUState *state) {
 static inline void push_stack(CPUState *state, uint8_t value) {
     write_memory(state, STACK_BASE + state->stack_pointer, value);
     state->stack_pointer--;
+    if (state->stack_pointer < 0) {
+        state->halt_reason = STACK_OVERFLOW_REASON;
+        state->halt_flag = true; 
+    }
 }
 
 __attribute__((always_inline)) inline uint8_t pop_stack(CPUState *state) {
     state->stack_pointer++;
+    if (state->stack_pointer > 0xFF) {
+        state->halt_reason = STACK_UNDERFLOW_REASON;
+        state->halt_flag = true; 
+    }
     return read_memory(state, STACK_BASE + state->stack_pointer);
 }
 
@@ -1174,8 +1182,6 @@ static inline void JSR(CPUState *state) {
     for (int i = 0; i < sizeof(hooked_address) / sizeof(hooked_address[0]); i++) {
         if (temp_address == hooked_address[i].address && hooked_address[i].hook_function != NULL) {
             hooked_address[i].hook_function(state);  
-            state->halt_reason = KEYBOARD_BUFFER_OVERFLOW_REASON;
-            state->halt_flag = true;  
             state->program_counter += 3;  
             return;  
         }
@@ -1795,23 +1801,6 @@ static inline void ROR_ABSOLUTE_X(CPUState *state) {
     #endif
 }
 
-static inline void RTI(CPUState *state) {  
-    uint8_t status = pop_stack(state);
-    state->negative_flag = (status >> 7) & 1; 
-    state->overflow_flag = (status >> 6) & 1; 
-    state->break_command = (status >> 4) & 1; 
-    state->decimal_mode = (status >> 3) & 1; 
-    state->interrupt_disable = (status >> 2) & 1; 
-    state->zero_flag = (status >> 1) & 1; 
-    state->carry_flag = status & 1; 
-    uint8_t low_byte = pop_stack(state); 
-    uint8_t high_byte = pop_stack(state);
-    state->program_counter = (high_byte << 8) | low_byte; 
-    #if debug
-    snprintf(state->disassembly, sizeof(state->disassembly), "$%04X: RTI", state->program_counter);
-    #endif
-}
-
 static inline void RTS(CPUState *state) {  
     state->program_counter = pop_stack_16(state) + 1;
     #if debug
@@ -2182,6 +2171,23 @@ static inline void SEI(CPUState *state) {
     #endif
 }
 
+static inline void RTI(CPUState *state) {  
+    uint8_t status = pop_stack(state);
+    state->negative_flag = (status >> 7) & 1; 
+    state->overflow_flag = (status >> 6) & 1; 
+    state->break_command = (status >> 4) & 1; 
+    state->decimal_mode = (status >> 3) & 1; 
+    state->interrupt_disable = (status >> 2) & 1; 
+    state->zero_flag = (status >> 1) & 1; 
+    state->carry_flag = status & 1; 
+    uint8_t low_byte = pop_stack(state); 
+    uint8_t high_byte = pop_stack(state);
+    state->program_counter = (high_byte << 8) | low_byte; 
+    #if debug
+    snprintf(state->disassembly, sizeof(state->disassembly), "$%04X: RTI", state->program_counter);
+    #endif
+}
+
 static inline void trigger_irq(CPUState *state, uint16_t irq_source) {
 
     state->IRQ_input = false; 
@@ -2375,6 +2381,14 @@ void execute_opcode(CPUState *state, uint8_t opcode) {
     }
 
     if (state->IRQ_input) {
+        if (state->interrupt_disable) {
+            state->IRQ_input = false;
+            #if debug
+            snprintf(state->disassembly, sizeof(state->disassembly), "$%04X: IRQ (Ignored due to interrupt disable)", state->irq_vector);
+            #endif
+            return;
+        }
+        gpio_put(25, gpio_get(25) ^ 1);
         state->IRQ_input = false; 
         #if debug
         snprintf(state->disassembly, sizeof(state->disassembly), "$%04X: IRQ", state->irq_vector);

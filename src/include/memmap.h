@@ -5,7 +5,7 @@
 #define use_host 0
 
 #if turbo_mode
-    #define CPU_CLOCK_KHZ   375000              
+    #define CPU_CLOCK_KHZ   300000              
     #define CPU_CORE_VOLTAGE VREG_VOLTAGE_1_30  
 #else
     #define CPU_CLOCK_KHZ   150000              
@@ -19,6 +19,7 @@
 #define CURSOR_X_ADDRESS         0xD3
 #define CURSOR_Y_ADDRESS         0xD6
 #define CURSOR_ENABLE_ADDRESS    0xCC
+#define CURSOR_BLINK_ADDRESS     0xCF
 
 #define RASTER_LINE              0xD012
 #define FRAME_READY_ADDRESS      0xD013
@@ -40,7 +41,25 @@
 #define C64_ROWS       25
 #define TOTAL_W        (C64_COLS + BORDER_SIDE * 2)
 #define TOTAL_H        (C64_ROWS + BORDER_TOP  * 2)
+#define C64_SCREEN_SIZE (TOTAL_W * TOTAL_H)
 
+#define FRAME_MAGIC_0   0xC6
+#define FRAME_MAGIC_1   0x40
+#define FRAME_MAGIC_2   0xDE
+#define FRAME_MAGIC_3   0xAD
+
+#pragma pack(push, 1)
+typedef struct {
+    uint8_t  magic[4];
+    uint8_t  screen[C64_SCREEN_SIZE];   // PETSCII codes
+    uint8_t  color[C64_SCREEN_SIZE];    // fg colour index 0-15
+    uint8_t  background[C64_SCREEN_SIZE];  // $D021
+    uint8_t  cursor_x;
+    uint8_t  cursor_y;
+    uint8_t  cursor_on;                 // 0 = on (visible), else off
+    uint8_t  _pad;
+} C64ScreenPacket;
+#pragma pack(pop)
 
 #define C64_KEY_BUFFER  0x0277
 #define C64_KEY_COUNT   0x00C6

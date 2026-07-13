@@ -42,6 +42,8 @@ add_executable(c64_plus
         src/modules/floatpoint.c
         src/modules/ringbuffer.c
         src/modules/rom_hooks.c
+        src/modules/6502_disasm.c
+        #src/modules/editor.c
         #libs/pico-lfs/src/pico_lfs.c
         )
 

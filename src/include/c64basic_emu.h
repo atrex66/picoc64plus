@@ -337,20 +337,4 @@ const char* c64_to_utf8[256] = {
     " ",  
 };
 
-
-
-#pragma pack(push, 1)
-typedef struct {
-    uint8_t  magic[4];
-    uint8_t  screen[TOTAL_W * TOTAL_H];   
-    uint8_t  color[TOTAL_W * TOTAL_H];    
-    uint8_t  background[TOTAL_W * TOTAL_H];  
-    uint8_t  border;                    
-    uint8_t  cursor_x;
-    uint8_t  cursor_y;
-    uint8_t  cursor_on;                 
-    uint8_t  _pad;
-} C64ScreenPacket;
-#pragma pack(pop)
-
 #endif 

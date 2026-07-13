@@ -86,6 +86,9 @@ uint32_t current_time = 0;
 uint32_t target_frame_ns = 16666ul;
 input_queue_t input_queue = {0};
 bool use_utf8 = true; 
+uint16_t frame_counter = 0;
+uint64_t last_fps_time = 0;
+
 
 #define send_home() APPEND("\033[H")
 
@@ -621,14 +624,7 @@ void infinite_loop() {
 
 
 static uint8_t ascii_to_petscii(uint8_t c) {
-    
-    
-    
-    
-    
     if (c == 0x7F) return 0x14;
-    
-    
     return (uint8_t)c; 
 }
 
@@ -660,13 +656,21 @@ static inline int read_input(input_queue_t *q)
 }
 
 void frame_end() {
+    frame_counter++;
     if (fps_lock) {
         uint32_t target_time = current_time + target_frame_ns; 
-        
         while(target_time>time_us_32())
         {
 
         }
+    }
+    if (frame_counter % 60 == 0) {
+        uint64_t now = time_us_32();
+        uint64_t elapsed_time = now - last_fps_time;
+        float fps = 60.0f / (elapsed_time / 1000000.0f);
+        last_fps_time = now;
+        printf("\033[0m");
+        printf("FPS: %.2f \033[K\n", fps);
     }
 }
 
@@ -684,9 +688,7 @@ void char_atc(int x, int y, uint8_t color, char ch) {
     {
         return;
     }
-
     int pos = y * FRAME_WIDTH + x;
-
     screen[pos] = ch;
     color_data[pos] = color;
 }
@@ -705,9 +707,7 @@ void char_at_buffer(Buffer *buffer, int x, int y, char ch) {
     {
         return;
     }
-
     int pos = y * buffer->width + x;
-
     buffer->data[pos] = ch;
 }
 
@@ -755,6 +755,12 @@ void _render_line(int y, bool crlf) {
         int _pos = (y) * FRAME_WIDTH + (x);
         uint8_t color = color_data[_pos];
         uint8_t background_color = background[_pos];
+        uint8_t invert = screen[_pos] & 0x80;
+        if (invert) {
+            color = background_color;
+            background_color = color_data[_pos];
+            screen[_pos] &= 0x7F;
+        }
         #if terminal_cursor == 0
             bool is_cursor_position = (cursor_enable && cursor_x == x && cursor_y == y);
             if (is_cursor_position) {
@@ -854,6 +860,7 @@ void init_terminal(int width, int height) {
     background = (uint8_t *)malloc(FRAME_WIDTH * FRAME_HEIGHT);
     line_buffer = (char *)malloc((19 * FRAME_WIDTH) * FRAME_HEIGHT); 
     clear_terminal();
+    write(STDOUT_FILENO, "\033[?1049h", 8); 
     hide_terminal_cursor();
     show_cursor();
     for (int _y = 0; _y < FRAME_HEIGHT; _y++) {
@@ -1258,6 +1265,7 @@ void printf_add_big_atc(int x, int y, uint8_t color, const char *fmt, ...)
     }
 }
 
+/*
 char ascii_to_screencode(uint8_t c) {
     if (c >= 0x20 && c <= 0x5F) {
         return (char)c; 
@@ -1267,6 +1275,57 @@ char ascii_to_screencode(uint8_t c) {
         return 0x14; 
     }
     return (char)c; 
+}
+*/
+
+uint8_t ascii_to_screencode(uint8_t c) {
+    // Számok maradnak (0-9)
+    if (c >= '0' && c <= '9') {
+        return c;
+    }
+
+    // Kisbetűk → nagybetűs screen code (C64 upper case)
+    if (c >= 'a' && c <= 'z') {
+        return c - 'a' + 1;
+    }
+
+    // Nagybetűk
+    if (c >= 'A' && c <= 'Z') {
+        return c - 'A' + 1;
+    }
+
+    // Speciális karakterek
+    switch (c) {
+        case ' ':  return 0x20;
+        case '!':  return 0x21;
+        case '"':  return 0x22;
+        case '#':  return 0x23;
+        case '$':  return 0x24;
+        case '%':  return 0x25;
+        case '&':  return 0x26;
+        case '\'': return 0x27;
+        case '(':  return 0x28;
+        case ')':  return 0x29;
+        case '*':  return 0x2A;
+        case '+':  return 0x2B;
+        case ',':  return 0x2C;
+        case '-':  return 0x2D;
+        case '.':  return 0x2E;
+        case '/':  return 0x2F;
+        case ':':  return 0x3A;
+        case ';':  return 0x3B;
+        case '<':  return 0x3C;
+        case '=':  return 0x3D;
+        case '>':  return 0x3E;
+        case '?':  return 0x3F;
+        case '@':  return 0x00;
+        case '[':  return 0x1B;
+        case '\\': return 0x1C;
+        case ']':  return 0x1D;
+        case '^':  return 0x1E;
+        case '_':  return 0x1F;
+        default:   return 0x20;   // ismeretlen → space
+    }
 }
 
 void printf_atc(int x, int y, uint8_t color, const char *fmt, ...)
@@ -1284,6 +1343,47 @@ void printf_atc(int x, int y, uint8_t color, const char *fmt, ...)
     for (const char *p = text; *p; p++) {
         uint8_t ch = (uint8_t)*p;
         screen[(y) * FRAME_WIDTH + (cursor_x)] = ch;
+        color_data[(y) * FRAME_WIDTH + (cursor_x)] = color;
+        cursor_x++;
+    }
+}
+
+void printf_atc_buffer(int x, int y, uint8_t color, Buffer *buffer, const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+
+    char text[512];
+    vsnprintf(text, sizeof(text), fmt, args);
+
+    va_end(args);
+
+    int cursor_x = x;
+
+    for (const char *p = text; *p; p++) {
+        uint8_t ch = (uint8_t)*p;
+        buffer->data[y * buffer->width + cursor_x] = ch;
+        buffer->color_data[y * buffer->width + cursor_x] = color;
+        cursor_x++;
+    }
+}
+
+
+void printf_atc_ascii(int x, int y, uint8_t color, const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+
+    char text[512];
+    vsnprintf(text, sizeof(text), fmt, args);
+
+    va_end(args);
+
+    int cursor_x = x;
+
+    for (const char *p = text; *p; p++) {
+        uint8_t ch = (uint8_t)*p;
+        screen[(y) * FRAME_WIDTH + (cursor_x)] = ascii_to_screencode(ch);
         color_data[(y) * FRAME_WIDTH + (cursor_x)] = color;
         cursor_x++;
     }

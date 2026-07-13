@@ -18,7 +18,9 @@ static const char* halt_reason[] = {
     [8] = "GPIO_GET_PINSTATE",
     [9] = "ADC_ILLEGAL_CHANNEL",
     [10] = "DMA_CHANNEL_ALREADY_CLAIMED",
-    [11] = "KEYBOARD_BUFFER_OVERFLOW"
+    [11] = "KEYBOARD_BUFFER_OVERFLOW",
+    [12] = "STACK_OVERFLOW",
+    [13] = "STACK_UNDERFLOW",
 };
 
 extern void (*arm_opcode_functions[256])(CPUState *state);

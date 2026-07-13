@@ -1,11 +1,10 @@
-# C64 minimal emulator on Raspberry Pico 2
+##C64-inspired development platform for modern microcontrollers
 
 Program the Pico peripherals like in the 80's
 
-The emulator do not try to emulate the real hardware there is no other chips emulation.
-in theory you can modify the code to run with different rom files eg. simulate other machines
-or you can run the emulator on different microcontrollers if you implement the syscalls for
-the different microcontroller, and the keyboard input for the terminal.
+This project is not a cycle-accurate Commodore 64 emulator. Instead, it provides a lightweight 6502-based virtual machine 
+capable of running Commodore BASIC and KERNAL while extending the system with modern hardware features through 
+platform-independent system calls.
 
 **The Basic extension autostart now (8k cartridge on $8000)**
 
@@ -22,7 +21,8 @@ there.
 ## Features
 
 - Full MOS 6502 CPU emulation (all standard opcodes)
-- **SysCall** new opcode, you can call native ARM code from 6502 assembly ($#19)
+- **SysCall** new opcode, you can call native ARM code from 6502 assembly ($#19) assmembly macro defined in the basic extensions,
+    you can find the syscall routines in the src/modules/syscall.c file
 - KERNAL & BASIC ROM emulation from embedded header file
 - **Custom BASIC tokens** — new commands and functions for GPIO, PWM, I2C and DMA
 - Memory-mapped hardware registers — same hardware also accessible via `PEEK`/`POKE`
@@ -75,17 +75,24 @@ picotool load build/c64_plus.uf2 -fx
 ---
 
 ## Host terminal
-
-Start PUTTY (recommended), change to serial port, find your serial port of the pico and start
+for windows users, the best display results is using PUTTY, 
+change to serial port, find your serial port of the pico and start,
 it is recommended to disable autowrap in the settings
+
+tio, if you are using linux use tio to connect to the pico, the screen refresh
+is much deterministic than PUTTY and gives a smoother display.
+```bash
+sudo apt update
+sudo apt install tio
+tio /dev/ttyACM0
+```
 
 ---
 
 ## Custom BASIC Commands
 
 The BASIC extension is assembled from `CustomBasicCommands/` and linked into the firmware as `src/basicext.h`.
-
-Build the extension (requires KickAssembler):
+Build the extension requires KickAssembler, you can install KickAseembler wit the install_kickass.sh in linux:
 
 ```bash
 cd CustomBasicCommands
@@ -105,4 +112,3 @@ make
 
 the rom files are used is found here:
 https://github.com/floooh/chips-test/blob/master/examples/roms/c64-roms.h
-

@@ -29,7 +29,7 @@ typedef struct {
     uint8_t accumulator;
     uint8_t x_register;
     uint8_t y_register;
-    uint8_t stack_pointer;
+    int16_t stack_pointer;
     uint16_t program_counter;
     uint16_t reset_vector;
     uint16_t irq_vector;
@@ -47,14 +47,6 @@ typedef struct {
     
     uint8_t pico_irq_source;  
     
-    
-    
-    
-    
-    
-    
-    
-
     bool frame_ready_flag;  
 
     bool zero_flag;
@@ -75,5 +67,8 @@ typedef struct {
     uint16_t address;  
     void (*hook_function)(CPUState *state);  
 } KernalHook_t;
+
+
+
 
 #endif 
